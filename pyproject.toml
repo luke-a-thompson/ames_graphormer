@@ -2,15 +2,37 @@
 name = "ames_graphormer"
 version = "0.1.0"
 description = ""
-authors = ["Luke :)"]
+authors = ["Luke Thompson", "Josiah Evans"]
 license = "Apache"
 readme = "README.md"
 
+[tool.poetry.scripts]
+train = "graphormer.cli:train"
+
+[[tool.poetry.packages]]
+include = "graphormer"
+
 [tool.poetry.dependencies]
 python = "^3.11"
-pytorch = "^2.0.1"
-torch-geometric = "^2.4.0"
-networkx =  "^3.1"
+torch = {version = "^2.2.2+cu118", source="pytorch-gpu-src-cu118"}
+torch-geometric = "^2.5.2"
+networkx = "^3.3"
+click = "^8.1.7"
+scikit-learn = "^1.4.1"
+tqdm = "^4.66.2"
+pandas = "^2.2.1"
+
+
+[[tool.poetry.source]]
+name = "pytorch-gpu-src-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+priority = "explicit"
+
+# [[tool.poetry.source]]
+# name = "pyg-gpu-src-cu118"
+# url = "https://data.pyg.org/whl"
+# priority = "explicit"
+
 
 [build-system]
 requires = ["poetry-core"]
