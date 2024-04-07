@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "ames_graphormer"
+version = "0.1.0"
+description = ""
+authors = ["Luke :)"]
+license = "Apache"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pytorch = "^2.0.1"
+torch-geometric = "^2.4.0"
+networkx =  "^3.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
