@@ -1,25 +1,31 @@
-from typing import Union
-
 import torch
+import torch.autograd.profiler as profiler
 from torch import nn
 from torch_geometric.data import Data
 
-from graphormer.functional import shortest_path_distance, batched_shortest_path_distance
-from graphormer.layers import GraphormerEncoderLayer, CentralityEncoding, SpatialEncoding
+from graphormer.functional import batched_shortest_path_distance, shortest_path_distance
+from graphormer.layers import (
+    CentralityEncoding,
+    GraphormerEncoderLayer,
+    SpatialEncoding,
+    flatten_paths_tensor,
+)
 
 
 class Graphormer(nn.Module):
-    def __init__(self,
-                 num_layers: int,
-                 input_node_dim: int,
-                 node_dim: int,
-                 input_edge_dim: int,
-                 edge_dim: int,
-                 output_dim: int,
-                 n_heads: int,
-                 max_in_degree: int,
-                 max_out_degree: int,
-                 max_path_distance: int):
+    def __init__(
+        self,
+        num_layers: int,
+        input_node_dim: int,
+        node_dim: int,
+        input_edge_dim: int,
+        edge_dim: int,
+        output_dim: int,
+        n_heads: int,
+        max_in_degree: int,
+        max_out_degree: int,
+        max_path_distance: int,
+    ):
         """
         :param num_layers: number of Graphormer layers
         :param input_node_dim: input dimension of node features
@@ -51,48 +57,61 @@ class Graphormer(nn.Module):
         self.centrality_encoding = CentralityEncoding(
             max_in_degree=self.max_in_degree,
             max_out_degree=self.max_out_degree,
-            node_dim=self.node_dim
+            node_dim=self.node_dim,
         )
 
         self.spatial_encoding = SpatialEncoding(
             max_path_distance=max_path_distance,
         )
 
-        self.layers = nn.ModuleList([
-            GraphormerEncoderLayer(
-                node_dim=self.node_dim,
-                edge_dim=self.edge_dim,
-                n_heads=self.n_heads,
-                max_path_distance=self.max_path_distance) for _ in range(self.num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                GraphormerEncoderLayer(
+                    node_dim=self.node_dim,
+                    edge_dim=self.edge_dim,
+                    n_heads=self.n_heads,
+                    max_path_distance=self.max_path_distance,
+                )
+                for _ in range(self.num_layers)
+            ]
+        )
 
         self.node_out_lin = nn.Linear(self.node_dim, self.output_dim)
 
-    def forward(self, data: Union[Data]) -> torch.Tensor:
+    def forward(self, data: Data) -> torch.Tensor:
         """
         :param data: input graph of batch of graphs
         :return: torch.Tensor, output node embeddings
         """
+        assert data.x is not None
+        assert data.edge_index is not None
+        assert data.edge_attr is not None
+
         x = data.x.float()
+
         edge_index = data.edge_index.long()
         edge_attr = data.edge_attr.float()
 
-        if type(data) == Data:
+        if isinstance(data, Data):
             ptr = None
             node_paths, edge_paths = shortest_path_distance(data)
         else:
             ptr = data.ptr
             node_paths, edge_paths = batched_shortest_path_distance(data)
 
+        flattened_edge_paths = flatten_paths_tensor(edge_paths)
+
         x = self.node_in_lin(x)
         edge_attr = self.edge_in_lin(edge_attr)
+        # (num, edge_dim)
 
         x = self.centrality_encoding(x, edge_index)
         b = self.spatial_encoding(x, node_paths)
 
         for layer in self.layers:
-            x = layer(x, edge_attr, b, edge_paths, ptr)
+            x = layer(x, edge_attr, b, flattened_edge_paths, ptr)
 
         x = self.node_out_lin(x)
 
         return x
+
