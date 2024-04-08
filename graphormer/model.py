@@ -1,5 +1,4 @@
 import torch
-import torch.autograd.profiler as profiler
 from torch import nn
 from torch_geometric.data import Data
 

@@ -1,6 +1,7 @@
 from typing import Dict, List, Tuple
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch_geometric.utils import degree
 
@@ -116,6 +117,7 @@ class EdgeEncoding(nn.Module):
         """
         # shape (num_nodes**2, max_path_len)
         edge_paths_flat = edge_paths.flatten(0, 1).to(x.device)
+
         edge_mask = (edge_paths_flat != -1).to(x.device)
         edge_indices = torch.where(edge_mask, edge_paths_flat, 0).to(x.device)
         path_lengths = edge_mask.sum(dim=1)
@@ -146,11 +148,23 @@ class EdgeEncoding(nn.Module):
         )
         # Find the mean based on the path lengths
         edge_embeddings = edge_embeddings.sum(dim=1)
-        edge_embeddings = edge_embeddings.div(path_lengths)
+
+        non_empty_paths = path_lengths != 0
+        edge_embeddings[non_empty_paths] = edge_embeddings[non_empty_paths].div(
+            path_lengths[non_empty_paths])
 
         cij = edge_embeddings.reshape((x.shape[0], x.shape[0])).to(x.device)
-        cij = torch.nan_to_num(cij).to(x.device)
         return cij
+
+
+def print_differences(a, b):
+    differences = torch.abs(a - b)
+    indices = torch.nonzero(differences > 1e-6)
+
+    for idx in indices:
+        idx_tuple = tuple(idx.tolist())
+        print(f"Index: {idx_tuple}, Tensor1 Value: {
+              a[idx_tuple]}, Tensor2 Value: {a[idx_tuple]}, Diff: {a[idx_tuple] - b[idx_tuple]}")
 
 
 class GraphormerAttentionHead(nn.Module):
@@ -203,8 +217,8 @@ class GraphormerAttentionHead(nn.Module):
             batch_mask_zeros += 1
         else:
             for i in range(len(ptr) - 1):
-                batch_mask_neg_inf[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = 1
-                batch_mask_zeros[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = 1
+                batch_mask_neg_inf[ptr[i]: ptr[i + 1], ptr[i]: ptr[i + 1]] = 1
+                batch_mask_zeros[ptr[i]: ptr[i + 1], ptr[i]: ptr[i + 1]] = 1
 
         query = self.q(x)
         key = self.k(x)
@@ -221,11 +235,12 @@ class GraphormerAttentionHead(nn.Module):
         if type(ptr) == type(None):
             a = query.mm(key.transpose(0, 1)) / query.size(-1) ** 0.5
         else:
-            a = torch.zeros((query.shape[0], query.shape[0]), device=key.device)
+            a = torch.zeros(
+                (query.shape[0], query.shape[0]), device=key.device)
             for i in range(len(ptr) - 1):
-                a[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = (
-                    query[ptr[i] : ptr[i + 1]].mm(
-                        key[ptr[i] : ptr[i + 1]].transpose(0, 1)
+                a[ptr[i]: ptr[i + 1], ptr[i]: ptr[i + 1]] = (
+                    query[ptr[i]: ptr[i + 1]].mm(
+                        key[ptr[i]: ptr[i + 1]].transpose(0, 1)
                     )
                     / query.size(-1) ** 0.5
                 )
@@ -278,17 +293,16 @@ class GraphormerMultiHeadAttention(nn.Module):
         :param ptr: batch pointer that shows graph indexes in batch of graphs
         :return: torch.Tensor, node embeddings after all attention heads
         """
-        attn_results = []
-        for attention_head in self.heads:
-            attn_results.append(attention_head(x, edge_attr, b, edge_paths, ptr))
-
-        mh_attn = torch.cat(
-            attn_results,
-            dim=-1,
+        return self.linear(
+            torch.cat(
+                [
+                    attention_head(x, edge_attr, b, edge_paths,
+                                   ptr)
+                    for attention_head in self.heads
+                ],
+                dim=-1,
+            )
         )
-        attn = self.linear(mh_attn)
-
-        return attn
 
 
 class GraphormerEncoderLayer(nn.Module):
@@ -335,8 +349,13 @@ class GraphormerEncoderLayer(nn.Module):
         :param ptr: batch pointer that shows graph indexes in batch of graphs
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
-        x_prime = self.attention(self.ln_1(x), edge_attr, b, edge_paths, ptr) + x
+        x_prime = (
+            self.attention(self.ln_1(x), edge_attr, b,
+                           edge_paths, ptr)
+            + x
+        )
         x_new = self.ff(self.ln_2(x_prime)) + x_prime
+        x_new = F.gelu(x_new, approximate='tanh')
 
         return x_new
 
