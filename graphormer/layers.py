@@ -54,34 +54,35 @@ class SpatialEncoding(nn.Module):
 
         self.b = nn.Parameter(torch.randn(self.max_path_distance))
 
-    def forward(self, x: torch.Tensor, paths) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, paths: torch.Tensor) -> torch.Tensor:
         """
         :param x: node feature matrix
         :param paths: pairwise node paths
         :return: torch.Tensor, spatial Encoding matrix
         """
-        spatial_matrix = torch.zeros((x.shape[0], x.shape[0])).to(
-            next(self.parameters()).device
-        )
-        for src in paths:
-            for dst in paths[src]:
-                spatial_matrix[src][dst] = self.b[
-                    min(len(paths[src][dst]), self.max_path_distance) - 1
-                ]
 
+        paths_flat = paths.flatten(0, 1).to(x.device)
+        paths_mask = (paths_flat != -1).to(x.device)
+        path_lengths = paths_mask.sum(dim=1)
+        length_mask = path_lengths != 0
+        max_lengths = torch.full_like(path_lengths, self.max_path_distance)
+        b_idx = torch.minimum(
+            path_lengths, max_lengths) - 1
+        spatial_matrix = torch.zeros_like(b_idx, dtype=torch.float)
+        spatial_matrix[length_mask] = self.b[b_idx][length_mask]
+        spatial_matrix = spatial_matrix.reshape((x.shape[0], x.shape[0]))
         return spatial_matrix
 
 
 def flatten_paths_tensor(
-    edge_paths: Dict[int, Dict[int, List[int]]], max_path_length: int = 5
+    paths: Dict[int, Dict[int, List[int]]], max_path_length: int = 5
 ) -> torch.Tensor:
-    # Set intersection
-    nodes = edge_paths.keys()
+    nodes = paths.keys()
 
     tensor_paths = torch.full(
         (len(nodes), len(nodes), max_path_length), -1, dtype=torch.int
     )
-    for src, dsts in edge_paths.items():
+    for src, dsts in paths.items():
         for dst, path in dsts.items():
             path_tensor = torch.tensor(
                 path[:max_path_length] + [-1] * (max_path_length - len(path)),
@@ -157,14 +158,15 @@ class EdgeEncoding(nn.Module):
         return cij
 
 
-def print_differences(a, b):
+def difference_idxs(a, b, epsilon=1e-6) -> torch.Tensor:
     differences = torch.abs(a - b)
-    indices = torch.nonzero(differences > 1e-6)
+    indices = torch.nonzero(differences > epsilon)
 
     for idx in indices:
         idx_tuple = tuple(idx.tolist())
         print(f"Index: {idx_tuple}, Tensor1 Value: {
-              a[idx_tuple]}, Tensor2 Value: {a[idx_tuple]}, Diff: {a[idx_tuple] - b[idx_tuple]}")
+              a[idx_tuple]}, Tensor2 Value: {b[idx_tuple]}, Diff: {a[idx_tuple] - b[idx_tuple]}")
+    return indices
 
 
 class GraphormerAttentionHead(nn.Module):

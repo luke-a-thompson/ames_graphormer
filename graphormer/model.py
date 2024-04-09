@@ -99,13 +99,14 @@ class Graphormer(nn.Module):
             node_paths, edge_paths = batched_shortest_path_distance(data)
 
         flattened_edge_paths = flatten_paths_tensor(edge_paths)
+        flattened_node_paths = flatten_paths_tensor(node_paths)
 
         x = self.node_in_lin(x)
         edge_attr = self.edge_in_lin(edge_attr)
         # (num, edge_dim)
 
         x = self.centrality_encoding(x, edge_index)
-        b = self.spatial_encoding(x, node_paths)
+        b = self.spatial_encoding(x, flattened_node_paths)
 
         for layer in self.layers:
             x = layer(x, edge_attr, b, flattened_edge_paths, ptr)
