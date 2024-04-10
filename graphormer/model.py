@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch_geometric.data import Data
 
-from graphormer.functional import batched_shortest_path_distance, shortest_path_distance
+from graphormer.functional import shortest_path_distance
 from graphormer.layers import (
     CentralityEncoding,
     GraphormerEncoderLayer,
@@ -91,12 +91,7 @@ class Graphormer(nn.Module):
         edge_index = data.edge_index.long()
         edge_attr = data.edge_attr.float()
 
-        if isinstance(data, Data):
-            ptr = None
-            node_paths, edge_paths = shortest_path_distance(data)
-        else:
-            ptr = data.ptr
-            node_paths, edge_paths = batched_shortest_path_distance(data)
+        node_paths, edge_paths = shortest_path_distance(data)
 
         flattened_edge_paths = flatten_paths_tensor(edge_paths)
         flattened_node_paths = flatten_paths_tensor(node_paths)
@@ -109,7 +104,7 @@ class Graphormer(nn.Module):
         b = self.spatial_encoding(x, flattened_node_paths)
 
         for layer in self.layers:
-            x = layer(x, edge_attr, b, flattened_edge_paths, ptr)
+            x = layer(x, edge_attr, b, flattened_edge_paths)
 
         x = self.node_out_lin(x)
 

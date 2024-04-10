@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import torch
 import torch.nn.functional as F
@@ -193,7 +193,6 @@ class GraphormerAttentionHead(nn.Module):
         edge_attr: torch.Tensor,
         b: torch.Tensor,
         edge_paths: torch.Tensor,
-        ptr=None,
     ) -> torch.Tensor:
         """
         :param query: node feature matrix
@@ -202,7 +201,6 @@ class GraphormerAttentionHead(nn.Module):
         :param edge_attr: edge feature matrix
         :param b: spatial Encoding matrix
         :param edge_paths: pairwise node paths in edge indexes
-        :param ptr: batch pointer that shows graph indexes in batch of graphs
         :return: torch.Tensor, node embeddings after attention operation
         """
         batch_mask_neg_inf = torch.full(
@@ -211,42 +209,19 @@ class GraphormerAttentionHead(nn.Module):
         batch_mask_zeros = torch.zeros(size=(x.shape[0], x.shape[0]), device=x.device)
 
         # OPTIMIZE: get rid of slices: rewrite to torch
-        if type(ptr) == type(None):
-            batch_mask_neg_inf = torch.ones(size=(x.shape[0], x.shape[0])).to(
-                next(self.parameters()).device
-            )
-            batch_mask_zeros += 1
-        else:
-            for i in range(len(ptr) - 1):
-                batch_mask_neg_inf[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = 1
-                batch_mask_zeros[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = 1
+        batch_mask_neg_inf = torch.ones(size=(x.shape[0], x.shape[0])).to(x.device)
+        batch_mask_zeros += 1
 
         q = self.linear_q(x)
         k = self.linear_k(x)
         v = self.linear_v(x)
 
         c = self.edge_encoding(x, edge_attr, edge_paths)
-        a = self.compute_a(k, q, ptr)
+        a = q.mm(k.transpose(0, 1)) / q.size(-1) ** 0.5
         a = (a + b + c) * batch_mask_neg_inf
         softmax = torch.softmax(a, dim=-1) * batch_mask_zeros
         x = softmax.mm(v)
         return x
-
-    def compute_a(self, key, query, ptr=None):
-        if type(ptr) == type(None):
-            a = query.mm(key.transpose(0, 1)) / query.size(-1) ** 0.5
-            print("AAAAAAAAAAAAAAA")
-        else:
-            a = torch.zeros((query.shape[0], query.shape[0]), device=key.device)
-            for i in range(len(ptr) - 1):
-                a[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = (
-                    query[ptr[i] : ptr[i + 1]].mm(
-                        key[ptr[i] : ptr[i + 1]].transpose(0, 1)
-                    )
-                    / query.size(-1) ** 0.5
-                )
-
-        return a
 
 
 # FIX: PyG attention instead of regular attention, due to specificity of GNNs
@@ -284,20 +259,18 @@ class GraphormerMultiHeadAttention(nn.Module):
         edge_attr: torch.Tensor,
         b: torch.Tensor,
         edge_paths: torch.Tensor,
-        ptr,
     ) -> torch.Tensor:
         """
         :param x: node feature matrix
         :param edge_attr: edge feature matrix
         :param b: spatial Encoding matrix
         :param edge_paths: pairwise node paths in edge indexes
-        :param ptr: batch pointer that shows graph indexes in batch of graphs
         :return: torch.Tensor, node embeddings after all attention heads
         """
         return self.linear(
             torch.cat(
                 [
-                    attention_head(x, edge_attr, b, edge_paths, ptr)
+                    attention_head(x, edge_attr, b, edge_paths)
                     for attention_head in self.heads
                 ],
                 dim=-1,
@@ -334,10 +307,9 @@ class GraphormerEncoderLayer(nn.Module):
         self,
         x: torch.Tensor,
         edge_attr: torch.Tensor,
-        b: torch,
+        b: torch.Tensor,
         edge_paths: torch.Tensor,
-        ptr,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         """
         h′(l) = MHA(LN(h(l−1))) + h(l−1)
         h(l) = FFN(LN(h′(l))) + h′(l)
@@ -346,12 +318,12 @@ class GraphormerEncoderLayer(nn.Module):
         :param edge_attr: edge feature matrix
         :param b: spatial Encoding matrix
         :param edge_paths: pairwise node paths in edge indexes
-        :param ptr: batch pointer that shows graph indexes in batch of graphs
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
-        x_prime = self.attention(self.ln_1(x), edge_attr, b, edge_paths, ptr) + x
+        x_prime = self.attention(self.ln_1(x), edge_attr, b, edge_paths) + x
 
         x_new = self.ff(self.ln_2(x_prime)) + x_prime
         x_new = F.gelu(x_new, approximate="tanh")
 
         return x_new
+
