@@ -166,7 +166,7 @@ class GraphormerAttentionHead(nn.Module):
         dim_k: int,
         edge_dim: int,
         max_path_distance: int,
-        attention_dropout_rate: float,
+        attention_dropout_rate: float = 0.1,
     ):
         """
         :param dim_in: node feature matrix input number of dimension
@@ -177,10 +177,15 @@ class GraphormerAttentionHead(nn.Module):
         super().__init__()
         self.edge_encoding = EdgeEncoding(edge_dim, max_path_distance)
 
-        self.q = nn.Linear(dim_in, dim_q)
-        self.k = nn.Linear(dim_in, dim_k)
-        self.v = nn.Linear(dim_in, dim_k)
-        self.att_dropount = nn.Dropout(attention_dropout_rate)
+        self.att_size = att_size = dim_in  # // num_heads # make multiheaded & vectorise
+        self.scale = att_size**-0.5
+
+        self.q = nn.Linear(dim_in, dim_in)
+        self.k = nn.Linear(dim_in, dim_in)
+        self.v = nn.Linear(dim_in, dim_in)
+        self.att_dropout = nn.Dropout(attention_dropout_rate)
+
+        self.output_layer = nn.Linear(dim_in * att_size, dim_in)
 
     def forward(
         self,
@@ -201,9 +206,9 @@ class GraphormerAttentionHead(nn.Module):
         :return: torch.Tensor, node embeddings after attention operation
         """
         batch_mask_neg_inf = torch.full(
-            size=(x.shape[0], x.shape[0]), fill_value=-1e6
-        ).device
-        batch_mask_zeros = torch.zeros(size=(x.shape[0], x.shape[0])).device
+            size=(x.shape[0], x.shape[0]), fill_value=-1e6, device=x.device
+        )
+        batch_mask_zeros = torch.zeros(size=(x.shape[0], x.shape[0]), device=x.device)
 
         # OPTIMIZE: get rid of slices: rewrite to torch
         if type(ptr) == type(None):
