@@ -66,8 +66,7 @@ class SpatialEncoding(nn.Module):
         path_lengths = paths_mask.sum(dim=1)
         length_mask = path_lengths != 0
         max_lengths = torch.full_like(path_lengths, self.max_path_distance)
-        b_idx = torch.minimum(
-            path_lengths, max_lengths) - 1
+        b_idx = torch.minimum(path_lengths, max_lengths) - 1
         spatial_matrix = torch.zeros_like(b_idx, dtype=torch.float)
         spatial_matrix[length_mask] = self.b[b_idx][length_mask]
         spatial_matrix = spatial_matrix.reshape((x.shape[0], x.shape[0]))
@@ -152,26 +151,22 @@ class EdgeEncoding(nn.Module):
 
         non_empty_paths = path_lengths != 0
         edge_embeddings[non_empty_paths] = edge_embeddings[non_empty_paths].div(
-            path_lengths[non_empty_paths])
+            path_lengths[non_empty_paths]
+        )
 
         cij = edge_embeddings.reshape((x.shape[0], x.shape[0])).to(x.device)
         return cij
 
 
-def difference_idxs(a, b, epsilon=1e-6) -> torch.Tensor:
-    differences = torch.abs(a - b)
-    indices = torch.nonzero(differences > epsilon)
-
-    for idx in indices:
-        idx_tuple = tuple(idx.tolist())
-        print(f"Index: {idx_tuple}, Tensor1 Value: {
-              a[idx_tuple]}, Tensor2 Value: {b[idx_tuple]}, Diff: {a[idx_tuple] - b[idx_tuple]}")
-    return indices
-
-
 class GraphormerAttentionHead(nn.Module):
     def __init__(
-        self, dim_in: int, dim_q: int, dim_k: int, edge_dim: int, max_path_distance: int
+        self,
+        dim_in: int,
+        dim_q: int,
+        dim_k: int,
+        edge_dim: int,
+        max_path_distance: int,
+        attention_dropout_rate: float,
     ):
         """
         :param dim_in: node feature matrix input number of dimension
@@ -185,6 +180,7 @@ class GraphormerAttentionHead(nn.Module):
         self.q = nn.Linear(dim_in, dim_q)
         self.k = nn.Linear(dim_in, dim_k)
         self.v = nn.Linear(dim_in, dim_k)
+        self.att_dropount = nn.Dropout(attention_dropout_rate)
 
     def forward(
         self,
@@ -206,10 +202,8 @@ class GraphormerAttentionHead(nn.Module):
         """
         batch_mask_neg_inf = torch.full(
             size=(x.shape[0], x.shape[0]), fill_value=-1e6
-        ).to(next(self.parameters()).device)
-        batch_mask_zeros = torch.zeros(size=(x.shape[0], x.shape[0])).to(
-            next(self.parameters()).device
-        )
+        ).device
+        batch_mask_zeros = torch.zeros(size=(x.shape[0], x.shape[0])).device
 
         # OPTIMIZE: get rid of slices: rewrite to torch
         if type(ptr) == type(None):
@@ -219,8 +213,8 @@ class GraphormerAttentionHead(nn.Module):
             batch_mask_zeros += 1
         else:
             for i in range(len(ptr) - 1):
-                batch_mask_neg_inf[ptr[i]: ptr[i + 1], ptr[i]: ptr[i + 1]] = 1
-                batch_mask_zeros[ptr[i]: ptr[i + 1], ptr[i]: ptr[i + 1]] = 1
+                batch_mask_neg_inf[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = 1
+                batch_mask_zeros[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = 1
 
         query = self.q(x)
         key = self.k(x)
@@ -237,12 +231,11 @@ class GraphormerAttentionHead(nn.Module):
         if type(ptr) == type(None):
             a = query.mm(key.transpose(0, 1)) / query.size(-1) ** 0.5
         else:
-            a = torch.zeros(
-                (query.shape[0], query.shape[0]), device=key.device)
+            a = torch.zeros((query.shape[0], query.shape[0]), device=key.device)
             for i in range(len(ptr) - 1):
-                a[ptr[i]: ptr[i + 1], ptr[i]: ptr[i + 1]] = (
-                    query[ptr[i]: ptr[i + 1]].mm(
-                        key[ptr[i]: ptr[i + 1]].transpose(0, 1)
+                a[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = (
+                    query[ptr[i] : ptr[i + 1]].mm(
+                        key[ptr[i] : ptr[i + 1]].transpose(0, 1)
                     )
                     / query.size(-1) ** 0.5
                 )
@@ -298,8 +291,7 @@ class GraphormerMultiHeadAttention(nn.Module):
         return self.linear(
             torch.cat(
                 [
-                    attention_head(x, edge_attr, b, edge_paths,
-                                   ptr)
+                    attention_head(x, edge_attr, b, edge_paths, ptr)
                     for attention_head in self.heads
                 ],
                 dim=-1,
@@ -351,13 +343,9 @@ class GraphormerEncoderLayer(nn.Module):
         :param ptr: batch pointer that shows graph indexes in batch of graphs
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
-        x_prime = (
-            self.attention(self.ln_1(x), edge_attr, b,
-                           edge_paths, ptr)
-            + x
-        )
+        x_prime = self.attention(self.ln_1(x), edge_attr, b, edge_paths, ptr) + x
+
         x_new = self.ff(self.ln_2(x_prime)) + x_prime
-        x_new = F.gelu(x_new, approximate='tanh')
+        x_new = F.gelu(x_new, approximate="tanh")
 
         return x_new
-
