@@ -8,6 +8,7 @@ def decrease_to_max_value(x, max_value):
 
 
 def eval_metrics(y_true, y_pred):
+    y_true, y_pred = y_true.detach().cpu(), y_pred.detach().cpu()
     return {balanced_accuracy_score(y_true, y_pred), roc_auc_score(y_true, y_pred)}
 
 

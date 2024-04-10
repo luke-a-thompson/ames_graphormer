@@ -177,15 +177,15 @@ class GraphormerAttentionHead(nn.Module):
         super().__init__()
         self.edge_encoding = EdgeEncoding(edge_dim, max_path_distance)
 
-        self.att_size = att_size = dim_in  # // num_heads # make multiheaded & vectorise
-        self.scale = att_size**-0.5
+        # self.att_size = att_size = dim_in // num_heads # make multiheaded & vectorise
+        # self.scale = att_size**-0.5
 
-        self.q = nn.Linear(dim_in, dim_in)
-        self.k = nn.Linear(dim_in, dim_in)
-        self.v = nn.Linear(dim_in, dim_in)
+        self.linear_q = nn.Linear(dim_in, dim_in)  # * att_size
+        self.linear_k = nn.Linear(dim_in, dim_in)
+        self.linear_v = nn.Linear(dim_in, dim_in)
         self.att_dropout = nn.Dropout(attention_dropout_rate)
 
-        self.output_layer = nn.Linear(dim_in * att_size, dim_in)
+        # self.output_layer = nn.Linear(dim_in * att_size, dim_in)
 
     def forward(
         self,
@@ -221,20 +221,21 @@ class GraphormerAttentionHead(nn.Module):
                 batch_mask_neg_inf[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = 1
                 batch_mask_zeros[ptr[i] : ptr[i + 1], ptr[i] : ptr[i + 1]] = 1
 
-        query = self.q(x)
-        key = self.k(x)
-        value = self.v(x)
+        q = self.linear_q(x)
+        k = self.linear_k(x)
+        v = self.linear_v(x)
 
         c = self.edge_encoding(x, edge_attr, edge_paths)
-        a = self.compute_a(key, query, ptr)
+        a = self.compute_a(k, q, ptr)
         a = (a + b + c) * batch_mask_neg_inf
         softmax = torch.softmax(a, dim=-1) * batch_mask_zeros
-        x = softmax.mm(value)
+        x = softmax.mm(v)
         return x
 
     def compute_a(self, key, query, ptr=None):
         if type(ptr) == type(None):
             a = query.mm(key.transpose(0, 1)) / query.size(-1) ** 0.5
+            print("AAAAAAAAAAAAAAA")
         else:
             a = torch.zeros((query.shape[0], query.shape[0]), device=key.device)
             for i in range(len(ptr) - 1):
