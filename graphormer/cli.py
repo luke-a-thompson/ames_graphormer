@@ -71,39 +71,55 @@ def train(
     )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-    loss_function = nn.L1Loss(reduction="sum")
+    loss_function = nn.BCEWithLogitsLoss(reduction="sum")
     model.to(device)
 
-    for _ in range(epochs):
+    progress_bar = tqdm(total=0, desc="Initializing...", unit="batch")
+
+    for epoch in range(epochs):
+        total_loss = 0.0
+        total_eval_loss = 0.0
+
+        # Set total length for training phase and update description
+        progress_bar.reset(total=len(train_loader))
+        progress_bar.set_description(f"Epoch {epoch+1}/{epochs} Train")
+
         model.train()
-        batch_loss = 0.0
-        prog = tqdm(train_loader)
-        for batch in prog:
+        for batch in train_loader:
             batch.to(device)
-            y = batch.y
+            y = batch.y.to(device)
             optimizer.zero_grad()
             output = global_mean_pool(model(batch), batch.batch)
-            loss = loss_function(output, y)
-            batch_loss += loss.item()
-            prog.set_description(f"batch_loss: {loss.item()}")
+            loss = loss_function(output, y.unsqueeze(1))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
-            assert not math.isnan(batch_loss)
+            total_loss += loss.item()
 
-        print("TRAIN LOSS", batch_loss / len(train_ids))
+            avg_loss = total_loss / (progress_bar.n + 1)
+            progress_bar.set_postfix_str(f"Avg Loss: {avg_loss:.4f}")
+            progress_bar.update()  # Increment the progress bar
+
+        # Prepare for the evaluation phase
+        progress_bar.reset(total=len(test_loader))
+        progress_bar.set_description(f"Epoch {epoch+1}/{epochs} Eval")
 
         model.eval()
-        batch_loss = 0.0
-        prog = tqdm(test_loader)
-        for batch in prog:
+        for batch in test_loader:
             batch.to(device)
-            y = batch.y
+            y = batch.y.to(device)
             with torch.no_grad():
                 output = global_mean_pool(model(batch), batch.batch)
-                loss = loss_function(output, y)
-            batch_loss += loss.item()
-            prog.set_description(f"batch_loss: {loss.item()}")
-            assert not math.isnan(batch_loss)
-        print("EVAL LOSS", batch_loss / len(test_ids))
+                loss = loss_function(output, y.unsqueeze(1))
+            total_eval_loss += loss.item()
 
+            progress_bar.update()  # Manually increment for each batch in eval
+
+        avg_eval_loss = total_eval_loss / len(test_loader)
+        progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
+
+        print(
+            f"Epoch {epoch+1} Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f}"
+        )
+
+    progress_bar.close()
