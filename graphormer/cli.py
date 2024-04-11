@@ -16,8 +16,8 @@ from graphormer.model import Graphormer
 @click.command()
 @click.option("--data", default="data")
 @click.option("--num_layers", default=3)
-@click.option("--node_dim", default=128)
-@click.option("--edge_dim", default=128)
+@click.option("--hidden_dim", default=128)
+@click.option("--edge_embedding_dim", default=128)
 @click.option("--n_heads", default=4)
 @click.option("--max_in_degree", default=5)
 @click.option("--max_out_degree", default=5)
@@ -31,8 +31,8 @@ from graphormer.model import Graphormer
 def train(
     data: str,
     num_layers: int,
-    node_dim: int,
-    edge_dim: int,
+    hidden_dim: int,
+    edge_embedding_dim: int,
     n_heads: int,
     max_in_degree: int,
     max_out_degree: int,
@@ -49,10 +49,10 @@ def train(
     dataset = AmesDataset(data)
     model = Graphormer(
         num_layers=num_layers,
-        input_node_dim=dataset.num_node_features,
-        node_dim=node_dim,
-        input_edge_dim=dataset.num_edge_features,
-        edge_dim=edge_dim,
+        node_feature_dim=dataset.num_node_features,
+        hidden_dim=hidden_dim,
+        edge_feature_dim=dataset.num_edge_features,
+        edge_embedding_dim=edge_embedding_dim,
         output_dim=dataset[0].y.shape[0],  # type: ignore
         n_heads=n_heads,
         max_in_degree=max_in_degree,
