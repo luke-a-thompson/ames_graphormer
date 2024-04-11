@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch_geometric.utils import degree
 
-from graphormer.utils import decrease_to_max_value
+from graphormer.utils import decrease_to_max_value, difference_idxs
 
 
 class CentralityEncoding(nn.Module):
@@ -203,14 +203,6 @@ class GraphormerAttentionHead(nn.Module):
         :param edge_paths: pairwise node paths in edge indexes
         :return: torch.Tensor, node embeddings after attention operation
         """
-        batch_mask_neg_inf = torch.full(
-            size=(x.shape[0], x.shape[0]), fill_value=-1e6, device=x.device
-        )
-        batch_mask_zeros = torch.zeros(size=(x.shape[0], x.shape[0]), device=x.device)
-
-        # OPTIMIZE: get rid of slices: rewrite to torch
-        batch_mask_neg_inf = torch.ones(size=(x.shape[0], x.shape[0])).to(x.device)
-        batch_mask_zeros += 1
 
         q = self.linear_q(x)
         k = self.linear_k(x)
@@ -218,8 +210,9 @@ class GraphormerAttentionHead(nn.Module):
 
         c = self.edge_encoding(x, edge_attr, edge_paths)
         a = q.mm(k.transpose(0, 1)) / q.size(-1) ** 0.5
-        a = (a + b + c) * batch_mask_neg_inf
-        softmax = torch.softmax(a, dim=-1) * batch_mask_zeros
+
+        a = a + b + c
+        softmax = torch.softmax(a, dim=-1)
         x = softmax.mm(v)
         return x
 
