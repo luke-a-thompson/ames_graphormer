@@ -158,53 +158,12 @@ class EdgeEncoding(nn.Module):
         return cij
 
 
-class GraphormerAttentionHead(nn.Module):
-    def __init__(
-        self,
-        d_x: int
-    ):
-        """
-        :param d_x: node feature matrix input number of dimension
-        """
-        super().__init__()
-        self.linear_q = nn.Linear(d_x, d_x)  # * att_size
-        self.linear_k = nn.Linear(d_x, d_x)
-        self.linear_v = nn.Linear(d_x, d_x)
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        spatial_encoding: torch.Tensor,
-        edge_encoding: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        :param query: node feature matrix
-        :param key: node feature matrix
-        :param value: node feature matrix
-        :param spatial_encoding: spatial encoding matrix
-        :param edge_encoding: edge encoding matrix
-        :return: torch.Tensor, node embeddings after attention operation
-        """
-
-        # shape
-        q = self.linear_q(x)
-        k = self.linear_k(x)
-        v = self.linear_v(x)
-
-        a = q.mm(k.transpose(0, 1)) / q.size(-1) ** 0.5
-
-        a = a + spatial_encoding + edge_encoding
-        softmax = torch.softmax(a, dim=-1)
-        x = softmax.mm(v)
-        return x
-
-
-# FIX: PyG attention instead of regular attention, due to specificity of GNNs
 class GraphormerMultiHeadAttention(nn.Module):
     def __init__(
         self,
         num_heads: int,
         d_x: int,
+        dropout_rate: float = 0.1
     ):
         """
         :param num_heads: number of attention heads
@@ -212,13 +171,14 @@ class GraphormerMultiHeadAttention(nn.Module):
         :param edge_dim: edge feature matrix number of dimension
         """
         super().__init__()
-        self.heads = nn.ModuleList(
-            [
-                GraphormerAttentionHead(d_x)
-                for _ in range(num_heads)
-            ]
-        )
-        self.linear = nn.Linear(num_heads * d_x, d_x)
+        self.num_heads = num_heads
+        self.scale = d_x ** -0.5
+        self.linear_q = nn.Linear(d_x, d_x * num_heads, bias=False)
+        self.linear_k = nn.Linear(d_x, d_x * num_heads, bias=False)
+        self.linear_v = nn.Linear(d_x, d_x * num_heads, bias=False)
+        self.att_dropout = nn.Dropout(dropout_rate)
+
+        self.linear_out = nn.Linear(d_x * num_heads, d_x, bias=False)
 
     def forward(
         self,
@@ -228,20 +188,22 @@ class GraphormerMultiHeadAttention(nn.Module):
     ) -> torch.Tensor:
         """
         :param x: node feature matrix
-        :param edge_attr: edge feature matrix
-        :param b: spatial Encoding matrix
-        :param edge_paths: pairwise node paths in edge indexes
+        :param spatial_encoding: spatial Encoding matrix
+        :param edge_encoding: edge encoding matrix
         :return: torch.Tensor, node embeddings after all attention heads
         """
-        return self.linear(
-            torch.cat(
-                [
-                    attention_head(x, spatial_encoding, edge_encoding)
-                    for attention_head in self.heads
-                ],
-                dim=-1,
-            )
-        )
+        q = self.linear_q(x).view(x.shape[1], x.shape[0], self.num_heads)
+        k = self.linear_k(x).view(x.shape[1], x.shape[0], self.num_heads)
+        v = self.linear_v(x).view(x.shape[1], x.shape[0], self.num_heads)
+
+        k = k.transpose(1, 2)
+        a = (q @ k) * self.scale
+        a = a + spatial_encoding + edge_encoding
+        a = torch.softmax(a, dim=2)
+        a = self.att_dropout(a)
+        out = a @ v
+        out = out.reshape((x.shape[0], self.num_heads * x.shape[1]))
+        return self.linear_out(out)
 
 
 class GraphormerEncoderLayer(nn.Module):
