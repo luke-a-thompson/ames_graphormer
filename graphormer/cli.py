@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from data.data_cleaning import AmesDataset
 from graphormer.model import Graphormer
+from graphormer.utils import save_model_weights
 
 
 @click.command()
@@ -136,6 +137,9 @@ def train(
             f"Epoch {
                 epoch+1} Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f}"
         )
+
+        if epoch % 1 == 0:
+            save_model_weights(model, epoch, optimizer, last_train_loss=avg_loss)
 
     progress_bar.close()
 
