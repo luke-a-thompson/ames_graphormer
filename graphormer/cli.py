@@ -1,4 +1,3 @@
-import math
 
 import click
 import torch
@@ -18,6 +17,7 @@ from graphormer.model import Graphormer
 @click.option("--num_layers", default=3)
 @click.option("--hidden_dim", default=128)
 @click.option("--edge_embedding_dim", default=128)
+@click.option("--ffn_hidden_dim", default=80)
 @click.option("--n_heads", default=4)
 @click.option("--max_in_degree", default=5)
 @click.option("--max_out_degree", default=5)
@@ -26,6 +26,11 @@ from graphormer.model import Graphormer
 @click.option("--random_state", default=42)
 @click.option("--batch_size", default=4)
 @click.option("--lr", default=3e-4)
+@click.option("--b1", default=0.9)
+@click.option("--b2", default=0.999)
+@click.option("--weight_decay", default=0.0)
+@click.option("--eps", default=1e-8)
+@click.option("--clip_grad_norm", default=5.0)
 @click.option("--torch_device", default="cuda")
 @click.option("--epochs", default=10)
 def train(
@@ -33,6 +38,7 @@ def train(
     num_layers: int,
     hidden_dim: int,
     edge_embedding_dim: int,
+    ffn_hidden_dim: int,
     n_heads: int,
     max_in_degree: int,
     max_out_degree: int,
@@ -41,6 +47,11 @@ def train(
     random_state: int,
     batch_size: int,
     lr: float,
+    b1: float,
+    b2: float,
+    weight_decay: float,
+    eps: float,
+    clip_grad_norm: float,
     torch_device: str,
     epochs: int,
 ):
@@ -53,6 +64,7 @@ def train(
         hidden_dim=hidden_dim,
         edge_feature_dim=dataset.num_edge_features,
         edge_embedding_dim=edge_embedding_dim,
+        ffn_hidden_dim=ffn_hidden_dim,
         output_dim=dataset[0].y.shape[0],  # type: ignore
         n_heads=n_heads,
         max_in_degree=max_in_degree,
@@ -70,7 +82,8 @@ def train(
         Subset(dataset, test_ids), batch_size=batch_size  # type: ignore
     )
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=lr, betas=(b1, b2), weight_decay=weight_decay, eps=eps)
     loss_function = nn.BCEWithLogitsLoss(reduction="sum")
     model.to(device)
 
@@ -92,7 +105,8 @@ def train(
             output = global_mean_pool(model(batch), batch.batch)
             loss = loss_function(output, y.unsqueeze(1))
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), clip_grad_norm, error_if_nonfinite=True)
             optimizer.step()
             total_loss += loss.item()
 
@@ -119,7 +133,9 @@ def train(
         progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
 
         print(
-            f"Epoch {epoch+1} Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f}"
+            f"Epoch {
+                epoch+1} Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f}"
         )
 
     progress_bar.close()
+

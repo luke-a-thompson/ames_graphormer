@@ -3,13 +3,9 @@ from torch import nn
 from torch_geometric.data import Data
 
 from graphormer.functional import shortest_path_distance
-from graphormer.layers import (
-    CentralityEncoding,
-    EdgeEncoding,
-    GraphormerEncoderLayer,
-    SpatialEncoding,
-    flatten_paths_tensor,
-)
+from graphormer.layers import (CentralityEncoding, EdgeEncoding,
+                               GraphormerEncoderLayer, SpatialEncoding,
+                               flatten_paths_tensor)
 
 
 class Graphormer(nn.Module):
@@ -20,6 +16,7 @@ class Graphormer(nn.Module):
         hidden_dim: int,
         edge_feature_dim: int,
         edge_embedding_dim: int,
+        ffn_hidden_dim: int,
         output_dim: int,
         n_heads: int,
         max_in_degree: int,
@@ -45,6 +42,7 @@ class Graphormer(nn.Module):
         self.hidden_dim = hidden_dim
         self.edge_feature_dim = edge_feature_dim
         self.edge_embedding_dim = edge_embedding_dim
+        self.ffn_hidden_dim = ffn_hidden_dim
         self.output_dim = output_dim
         self.n_heads = n_heads
         self.max_in_degree = max_in_degree
@@ -52,7 +50,8 @@ class Graphormer(nn.Module):
         self.max_path_distance = max_path_distance
 
         self.node_embedding = nn.Linear(self.node_feature_dim, self.hidden_dim)
-        self.edge_embedding = nn.Linear(self.edge_feature_dim, self.edge_embedding_dim)
+        self.edge_embedding = nn.Linear(
+            self.edge_feature_dim, self.edge_embedding_dim)
 
         self.centrality_encoding = CentralityEncoding(
             max_in_degree=self.max_in_degree,
@@ -73,6 +72,7 @@ class Graphormer(nn.Module):
                 GraphormerEncoderLayer(
                     hidden_dim=self.hidden_dim,
                     n_heads=self.n_heads,
+                    ffn_dim=self.ffn_hidden_dim,
                 )
                 for _ in range(self.num_layers)
             ]
@@ -85,15 +85,20 @@ class Graphormer(nn.Module):
         :param data: input graph of batch of graphs
         :return: torch.Tensor, output node embeddings
         """
+        # A list of nodes and their corresponding input features
         assert data.x is not None
+        # Two lists of nodes, where pair of matching indices represents an edge
         assert data.edge_index is not None
+        # A list of all the edges in the batch and their corresponding features
         assert data.edge_attr is not None
+        # A set of half-open ranges, where each range indicates the specific index of the
+        # starting node of the graph in the batch
+        assert data.ptr is not None
 
         x = data.x.float()
 
         edge_index = data.edge_index.long()
         edge_attr = data.edge_attr.float()
-
         node_paths, edge_paths = shortest_path_distance(data)
 
         flattened_edge_paths = flatten_paths_tensor(edge_paths)
@@ -102,7 +107,8 @@ class Graphormer(nn.Module):
         x = self.node_embedding(x)
         x = self.centrality_encoding(x, edge_index)
         edge_embedding = self.edge_embedding(edge_attr)
-        edge_encoding = self.edge_encoding(x, edge_embedding, flattened_edge_paths)
+        edge_encoding = self.edge_encoding(
+            x, edge_embedding, flattened_edge_paths)
         spatial_encoding = self.spatial_encoding(x, flattened_node_paths)
 
         for layer in self.layers:
