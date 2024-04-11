@@ -5,6 +5,7 @@ from torch_geometric.data import Data
 from graphormer.functional import shortest_path_distance
 from graphormer.layers import (
     CentralityEncoding,
+    EdgeEncoding,
     GraphormerEncoderLayer,
     SpatialEncoding,
     flatten_paths_tensor,
@@ -63,13 +64,14 @@ class Graphormer(nn.Module):
             max_path_distance=max_path_distance,
         )
 
+        self.edge_encoding = EdgeEncoding(self.edge_dim, self.max_path_distance)
+
         self.layers = nn.ModuleList(
             [
                 GraphormerEncoderLayer(
                     node_dim=self.node_dim,
                     edge_dim=self.edge_dim,
                     n_heads=self.n_heads,
-                    max_path_distance=self.max_path_distance,
                 )
                 for _ in range(self.num_layers)
             ]
@@ -101,10 +103,11 @@ class Graphormer(nn.Module):
         # (num, edge_dim)
 
         x = self.centrality_encoding(x, edge_index)
-        b = self.spatial_encoding(x, flattened_node_paths)
+        edge_encoding = self.edge_encoding(x, edge_attr, flattened_edge_paths)
+        spatial_encoding = self.spatial_encoding(x, flattened_node_paths)
 
         for layer in self.layers:
-            x = layer(x, edge_attr, b, flattened_edge_paths)
+            x = layer(x, spatial_encoding, edge_encoding)
 
         x = self.node_out_lin(x)
 

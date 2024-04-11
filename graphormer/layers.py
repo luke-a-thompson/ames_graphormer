@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch_geometric.utils import degree
 
-from graphormer.utils import decrease_to_max_value, difference_idxs
+from graphormer.utils import decrease_to_max_value
 
 
 class CentralityEncoding(nn.Module):
@@ -161,57 +161,39 @@ class EdgeEncoding(nn.Module):
 class GraphormerAttentionHead(nn.Module):
     def __init__(
         self,
-        dim_in: int,
-        dim_q: int,
-        dim_k: int,
-        edge_dim: int,
-        max_path_distance: int,
-        attention_dropout_rate: float = 0.1,
+        d_x: int
     ):
         """
-        :param dim_in: node feature matrix input number of dimension
-        :param dim_q: query node feature matrix input number dimension
-        :param dim_k: key node feature matrix input number of dimension
-        :param edge_dim: edge feature matrix number of dimension
+        :param d_x: node feature matrix input number of dimension
         """
         super().__init__()
-        self.edge_encoding = EdgeEncoding(edge_dim, max_path_distance)
-
-        # self.att_size = att_size = dim_in // num_heads # make multiheaded & vectorise
-        # self.scale = att_size**-0.5
-
-        self.linear_q = nn.Linear(dim_in, dim_in)  # * att_size
-        self.linear_k = nn.Linear(dim_in, dim_in)
-        self.linear_v = nn.Linear(dim_in, dim_in)
-        self.att_dropout = nn.Dropout(attention_dropout_rate)
-
-        # self.output_layer = nn.Linear(dim_in * att_size, dim_in)
+        self.linear_q = nn.Linear(d_x, d_x)  # * att_size
+        self.linear_k = nn.Linear(d_x, d_x)
+        self.linear_v = nn.Linear(d_x, d_x)
 
     def forward(
         self,
         x: torch.Tensor,
-        edge_attr: torch.Tensor,
-        b: torch.Tensor,
-        edge_paths: torch.Tensor,
+        spatial_encoding: torch.Tensor,
+        edge_encoding: torch.Tensor,
     ) -> torch.Tensor:
         """
         :param query: node feature matrix
         :param key: node feature matrix
         :param value: node feature matrix
-        :param edge_attr: edge feature matrix
-        :param b: spatial Encoding matrix
-        :param edge_paths: pairwise node paths in edge indexes
+        :param spatial_encoding: spatial encoding matrix
+        :param edge_encoding: edge encoding matrix
         :return: torch.Tensor, node embeddings after attention operation
         """
 
+        # shape
         q = self.linear_q(x)
         k = self.linear_k(x)
         v = self.linear_v(x)
 
-        c = self.edge_encoding(x, edge_attr, edge_paths)
         a = q.mm(k.transpose(0, 1)) / q.size(-1) ** 0.5
 
-        a = a + b + c
+        a = a + spatial_encoding + edge_encoding
         softmax = torch.softmax(a, dim=-1)
         x = softmax.mm(v)
         return x
@@ -222,36 +204,27 @@ class GraphormerMultiHeadAttention(nn.Module):
     def __init__(
         self,
         num_heads: int,
-        dim_in: int,
-        dim_q: int,
-        dim_k: int,
-        edge_dim: int,
-        max_path_distance: int,
+        d_x: int,
     ):
         """
         :param num_heads: number of attention heads
-        :param dim_in: node feature matrix input number of dimension
-        :param dim_q: query node feature matrix input number dimension
-        :param dim_k: key node feature matrix input number of dimension
+        :param d_x: node feature matrix input number of dimension
         :param edge_dim: edge feature matrix number of dimension
         """
         super().__init__()
         self.heads = nn.ModuleList(
             [
-                GraphormerAttentionHead(
-                    dim_in, dim_q, dim_k, edge_dim, max_path_distance
-                )
+                GraphormerAttentionHead(d_x)
                 for _ in range(num_heads)
             ]
         )
-        self.linear = nn.Linear(num_heads * dim_k, dim_in)
+        self.linear = nn.Linear(num_heads * d_x, d_x)
 
     def forward(
         self,
         x: torch.Tensor,
-        edge_attr: torch.Tensor,
-        b: torch.Tensor,
-        edge_paths: torch.Tensor,
+        spatial_encoding: torch.Tensor,
+        edge_encoding: torch.Tensor,
     ) -> torch.Tensor:
         """
         :param x: node feature matrix
@@ -263,7 +236,7 @@ class GraphormerMultiHeadAttention(nn.Module):
         return self.linear(
             torch.cat(
                 [
-                    attention_head(x, edge_attr, b, edge_paths)
+                    attention_head(x, spatial_encoding, edge_encoding)
                     for attention_head in self.heads
                 ],
                 dim=-1,
@@ -272,7 +245,7 @@ class GraphormerMultiHeadAttention(nn.Module):
 
 
 class GraphormerEncoderLayer(nn.Module):
-    def __init__(self, node_dim, edge_dim, n_heads, max_path_distance):
+    def __init__(self, node_dim, edge_dim, n_heads):
         """
         :param node_dim: node feature matrix input number of dimension
         :param edge_dim: edge feature matrix input number of dimension
@@ -285,12 +258,8 @@ class GraphormerEncoderLayer(nn.Module):
         self.n_heads = n_heads
 
         self.attention = GraphormerMultiHeadAttention(
-            dim_in=node_dim,
-            dim_k=node_dim,
-            dim_q=node_dim,
             num_heads=n_heads,
-            edge_dim=edge_dim,
-            max_path_distance=max_path_distance,
+            d_x=node_dim,
         )
         self.ln_1 = nn.LayerNorm(node_dim)
         self.ln_2 = nn.LayerNorm(node_dim)
@@ -299,9 +268,8 @@ class GraphormerEncoderLayer(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        edge_attr: torch.Tensor,
-        b: torch.Tensor,
-        edge_paths: torch.Tensor,
+        spatial_encoding: torch.Tensor,
+        edge_encoding: torch.Tensor,
     ) -> torch.Tensor:
         """
         h′(l) = MHA(LN(h(l−1))) + h(l−1)
@@ -313,7 +281,8 @@ class GraphormerEncoderLayer(nn.Module):
         :param edge_paths: pairwise node paths in edge indexes
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
-        x_prime = self.attention(self.ln_1(x), edge_attr, b, edge_paths) + x
+        x_prime = self.attention(
+            self.ln_1(x), spatial_encoding, edge_encoding) + x
 
         x_new = self.ff(self.ln_2(x_prime)) + x_prime
         x_new = F.gelu(x_new, approximate="tanh")
