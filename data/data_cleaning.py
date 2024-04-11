@@ -47,7 +47,7 @@ def clean_honma(honma_dataset: Path | pd.DataFrame) -> pd.DataFrame:
     return honma
 
 
-class AmesDataset(InMemoryDataset):
+class HonmaDataset(InMemoryDataset):
     def __init__(self, root, transform=None, pre_transform=None):
         super().__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -81,7 +81,41 @@ class AmesDataset(InMemoryDataset):
 
         torch.save(self.collate(data_list), self.processed_paths[0])
 
+class HansenDataset(InMemoryDataset):
+    def __init__(self, root, transform=None, pre_transform=None):
+        super().__init__(root, transform, pre_transform)
+        self.data, self.slices = torch.load(self.processed_paths[0])
+
+    @property
+    def raw_file_names(self):
+        return ["Hansen_Ames.csv"]
+
+    @property
+    def processed_file_names(self):
+        return ["hansen.pt"]
+
+    def process(self):
+        """
+        Process the raw data and save the processed data.
+
+        This method cleans the raw data, converts it into a format suitable for training,
+        and saves the processed data to a .pt file.
+
+        Returns:
+            None
+        """
+        honma = clean_hansen(self.raw_paths[0])  # Clean the raw_file_names, idx[0]
+
+        data_list = []
+
+        for smiles, ames in zip(honma["smiles"], honma["ames"]):
+            data = from_smiles(smiles)
+            data.y = torch.tensor([ames], dtype=torch.float)
+            data_list.append(data)
+
+        torch.save(self.collate(data_list), self.processed_paths[0])
+
 
 if __name__ == "__main__":
-    dataset = AmesDataset("data")
+    dataset = HansenDataset("data")
     print(len(dataset))

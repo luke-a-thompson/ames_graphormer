@@ -1,5 +1,6 @@
 from sklearn.metrics import balanced_accuracy_score, roc_auc_score
 import torch
+from typing import Dict
 
 
 def decrease_to_max_value(x, max_value):
@@ -32,6 +33,21 @@ def save_model_weights(
     last_train_loss: float = None,
     model_name: str = "Graphormer",
 ) -> None:
+    """
+    Save the model weights, optimizer state, and other necessary information to a checkpoint file.
+
+    Args:
+        model (torch.nn.Module): The model whose weights need to be saved.
+        epoch (int): The current epoch index.
+        optimizer (torch.optim.Optimizer): The optimizer used for training the model.
+        lr_scheduler (torch.optim.lr_scheduler.LRScheduler, optional): The learning rate scheduler used during training. Defaults to None.
+        last_train_loss (float, optional): The last recorded training loss. Defaults to None.
+        model_name (str, optional): The name of the model. Defaults to "Graphormer".
+
+    Returns:
+        None
+    """
+
     from datetime import datetime
     import os
 
@@ -58,3 +74,37 @@ def save_model_weights(
         print(f"Checkpoint successfully saved to {name}")
     except Exception as e:
         print(f"Failed to save {name}. Error: {e}")
+
+
+def print_model_parameters_table(parameters_dict: Dict[str, int | float]):
+    """
+    Display an overview of the training parameters.
+
+    Args:
+        parameters_dict (Dict[str, int | float]): A dictionary containing the training parameters.
+
+    Returns:
+        None
+    """
+    from rich.table import Table
+    from rich.console import Console
+    from rich import box
+
+    console = Console()
+
+    table = Table(
+        show_header=True,
+        header_style="green",
+        box=box.MINIMAL,  # Use a minimal box style to save space
+    )
+    table.add_column(
+        "Parameter",
+        style="dim",
+        overflow="fold",
+    )
+    table.add_column("Value", overflow="fold")
+
+    for name, value in parameters_dict.items():
+        table.add_row(name, str(value))
+
+    console.print(table)

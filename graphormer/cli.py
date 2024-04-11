@@ -1,4 +1,3 @@
-
 import click
 import torch
 from sklearn.model_selection import train_test_split
@@ -7,10 +6,14 @@ from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn.pool import global_mean_pool
 from tqdm import tqdm
+from sklearn.metrics import balanced_accuracy_score
 
-from data.data_cleaning import AmesDataset
+from data.data_cleaning import HonmaDataset
 from graphormer.model import Graphormer
-from graphormer.utils import save_model_weights
+from graphormer.utils import (
+    save_model_weights,
+    print_model_parameters_table,
+)
 
 
 @click.command()
@@ -56,9 +59,11 @@ def train(
     torch_device: str,
     epochs: int,
 ):
+    model_parameters = locals().copy()
+    print_model_parameters_table(model_parameters)
     torch.manual_seed(random_state)
     device = torch.device(torch_device)
-    dataset = AmesDataset(data)
+    dataset = HonmaDataset(data)
     model = Graphormer(
         num_layers=num_layers,
         node_feature_dim=dataset.num_node_features,
@@ -84,7 +89,8 @@ def train(
     )
 
     optimizer = torch.optim.AdamW(
-        model.parameters(), lr=lr, betas=(b1, b2), weight_decay=weight_decay, eps=eps)
+        model.parameters(), lr=lr, betas=(b1, b2), weight_decay=weight_decay, eps=eps
+    )
     loss_function = nn.BCEWithLogitsLoss(reduction="sum")
     model.to(device)
 
@@ -107,7 +113,8 @@ def train(
             loss = loss_function(output, y.unsqueeze(1))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
-                model.parameters(), clip_grad_norm, error_if_nonfinite=True)
+                model.parameters(), clip_grad_norm, error_if_nonfinite=True
+            )
             optimizer.step()
             total_loss += loss.item()
 
@@ -134,12 +141,29 @@ def train(
         progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
 
         print(
-            f"Epoch {
-                epoch+1} Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f}"
+            f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f} | Eval BAC: {balanced_accuracy_score(y.cpu().numpy(), output.cpu().numpy() > 0.5):.4f}"
         )
 
-        if epoch % 1 == 0:
+        if epoch % 20 == 0 and epoch != 0:
             save_model_weights(model, epoch, optimizer, last_train_loss=avg_loss)
 
     progress_bar.close()
 
+
+def inference(
+    model_path: str,
+    dataset: str,
+    torch_device: str,
+) -> torch.Tensor:
+    device = torch.device(torch_device)
+    dataset = HonmaDataset("data")
+    model = torch.load(model_path, map_location=device)
+
+    inference_loader = DataLoader(dataset, device)
+
+    model.eval()
+
+    with torch.no_grad:
+        output = model(inference_loader)
+
+    return output
