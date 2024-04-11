@@ -4,9 +4,13 @@ import torch
 from torch import nn
 from torch_geometric.utils import degree
 
+from graphormer.utils import decrease_to_max_value
+
 
 class FeedForwardNetwork(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, dropout_rate: float):
+    def __init__(
+        self, in_dim: int, hidden_dim: int, out_dim: int, dropout_rate: float
+    ):
         super(FeedForwardNetwork, self).__init__()
 
         self.layer1 = nn.Linear(in_dim, hidden_dim)
@@ -44,11 +48,11 @@ class CentralityEncoding(nn.Module):
         """
         num_nodes = x.shape[0]
 
-        in_degree = torch.clamp(
+        in_degree = decrease_to_max_value(
             degree(index=edge_index[1], num_nodes=num_nodes).long(),
             self.max_in_degree - 1,
         )
-        out_degree = torch.clamp(
+        out_degree = decrease_to_max_value(
             degree(index=edge_index[0], num_nodes=num_nodes).long(),
             self.max_out_degree - 1,
         )
@@ -154,9 +158,9 @@ class EdgeEncoding(nn.Module):
             valid_row_mask.unsqueeze(-1), path_attrs, 0.0
         ).to(x.device)
 
-        edge_encoding = torch.full(
-            (edge_paths_flat.shape[0], self.edge_embedding_dim), 0.0
-        ).to(x.device)
+        edge_encoding = torch.full((edge_paths_flat.shape[0], self.edge_embedding_dim), 0.0).to(
+            x.device
+        )
         edge_encoding = (
             (extended_edge_vector * masked_path_attrs).sum(dim=2).to(x.device)
         )
@@ -172,7 +176,12 @@ class EdgeEncoding(nn.Module):
 
 
 class GraphormerMultiHeadAttention(nn.Module):
-    def __init__(self, num_heads: int, hidden_dim: int, dropout_rate: float = 0.1):
+    def __init__(
+        self,
+        num_heads: int,
+        hidden_dim: int,
+        dropout_rate: float = 0.1
+    ):
         """
         :param num_heads: number of attention heads
         :param d_x: node feature matrix input number of dimension
@@ -181,14 +190,18 @@ class GraphormerMultiHeadAttention(nn.Module):
         super().__init__()
         self.num_heads = num_heads
 
-        self.scale = hidden_dim**-0.5
+        self.scale = hidden_dim ** -0.5
         self.hidden_dim = hidden_dim
-        self.linear_q = nn.Linear(hidden_dim, hidden_dim * num_heads, bias=False)
-        self.linear_k = nn.Linear(hidden_dim, hidden_dim * num_heads, bias=False)
-        self.linear_v = nn.Linear(hidden_dim, hidden_dim * num_heads, bias=False)
+        self.linear_q = nn.Linear(
+            hidden_dim, hidden_dim * num_heads, bias=False)
+        self.linear_k = nn.Linear(
+            hidden_dim, hidden_dim * num_heads, bias=False)
+        self.linear_v = nn.Linear(
+            hidden_dim, hidden_dim * num_heads, bias=False)
         self.att_dropout = nn.Dropout(dropout_rate)
 
-        self.linear_out = nn.Linear(hidden_dim * num_heads, hidden_dim, bias=False)
+        self.linear_out = nn.Linear(
+            hidden_dim * num_heads, hidden_dim, bias=False)
 
     def forward(
         self,
@@ -236,7 +249,8 @@ class GraphormerEncoderLayer(nn.Module):
         self.ln_1 = nn.LayerNorm(hidden_dim)
         self.ln_2 = nn.LayerNorm(hidden_dim)
         self.ffn_norm = nn.LayerNorm(hidden_dim)
-        self.ffn = FeedForwardNetwork(hidden_dim, ffn_dim, hidden_dim, ffn_dropout)
+        self.ffn = FeedForwardNetwork(
+            hidden_dim, ffn_dim, hidden_dim, ffn_dropout)
 
     def forward(
         self,
@@ -263,9 +277,11 @@ class GraphormerEncoderLayer(nn.Module):
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
         att_input = self.att_norm(x)
-        att_output = self.attention(att_input, spatial_encoding, edge_encoding) + x
+        att_output = self.attention(
+            att_input, spatial_encoding, edge_encoding) + x
 
         ffn_input = self.ffn_norm(att_output)
         ffn_output = self.ffn(ffn_input) + att_output
 
         return ffn_output
+
