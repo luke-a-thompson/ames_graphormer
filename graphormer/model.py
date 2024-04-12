@@ -3,12 +3,8 @@ from torch import nn
 from torch_geometric.data import Data
 
 from graphormer.functional import shortest_path_distance
-from graphormer.layers import (
-    CentralityEncoding,
-    EdgeEncoding,
-    GraphormerEncoderLayer,
-    SpatialEncoding,
-)
+from graphormer.layers import (CentralityEncoding, EdgeEncoding,
+                               GraphormerEncoderLayer, SpatialEncoding)
 
 
 class Graphormer(nn.Module):
@@ -53,7 +49,8 @@ class Graphormer(nn.Module):
         self.max_path_distance = max_path_distance
 
         self.node_embedding = nn.Linear(self.node_feature_dim, self.hidden_dim)
-        self.edge_embedding = nn.Linear(self.edge_feature_dim, self.edge_embedding_dim)
+        self.edge_embedding = nn.Linear(
+            self.edge_feature_dim, self.edge_embedding_dim)
 
         self.centrality_encoding = CentralityEncoding(
             max_in_degree=self.max_in_degree,
@@ -102,7 +99,6 @@ class Graphormer(nn.Module):
         edge_index = data.edge_index.long()
         edge_attr = data.edge_attr.float()
         node_paths, edge_paths = shortest_path_distance(data)
-
         x = self.node_embedding(x)
         x = self.centrality_encoding(x, edge_index)
         edge_embedding = self.edge_embedding(edge_attr)
