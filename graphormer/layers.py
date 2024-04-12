@@ -1,4 +1,3 @@
-from typing import Dict, List
 
 import torch
 from torch import nn
@@ -88,25 +87,6 @@ class SpatialEncoding(nn.Module):
         spatial_encoding = torch.zeros_like(b_idx, dtype=torch.float)
         spatial_encoding[length_mask] = self.b[b_idx][length_mask]
         return spatial_encoding.reshape((x.shape[0], x.shape[0]))
-
-
-def flatten_paths_tensor(
-    paths: Dict[int, Dict[int, List[int]]], max_path_length: int = 5
-) -> torch.Tensor:
-    nodes = paths.keys()
-    num_nodes = len(nodes)
-
-    tensor_paths = torch.full(
-        (num_nodes, num_nodes, max_path_length), -1, dtype=torch.int
-    )
-    for src, dsts in paths.items():
-        for dst, path in dsts.items():
-            path_tensor = torch.tensor(
-                path[:max_path_length] + [-1] * (max_path_length - len(path)),
-                dtype=torch.int,
-            )
-            tensor_paths[src, dst] = path_tensor
-    return tensor_paths
 
 
 class EdgeEncoding(nn.Module):

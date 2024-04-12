@@ -105,11 +105,13 @@ def train(
         progress_bar.set_description(f"Epoch {epoch+1}/{epochs} Train")
 
         model.train()
+        avg_loss = 0.0
         for batch in train_loader:
             batch.to(device)
             y = batch.y.to(device)
             optimizer.zero_grad()
-            output = global_mean_pool(model(batch), batch.batch)
+            model_out = model(batch)
+            output = global_mean_pool(model_out, batch.batch)
             loss = loss_function(output, y.unsqueeze(1))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
