@@ -128,6 +128,9 @@ def train(
         progress_bar.reset(total=len(test_loader))
         progress_bar.set_description(f"Epoch {epoch+1}/{epochs} Eval")
 
+        all_eval_labels = []
+        all_eval_preds = []
+
         model.eval()
         for batch in test_loader:
             batch.to(device)
@@ -137,13 +140,16 @@ def train(
                 loss = loss_function(output, y.unsqueeze(1))
             total_eval_loss += loss.item()
 
+            all_eval_preds.extend(torch.sigmoid(output.detach().cpu()).numpy())
+            all_eval_labels.extend(y.cpu().numpy())
+
             progress_bar.update()  # Manually increment for each batch in eval
 
         avg_eval_loss = total_eval_loss / len(test_loader)
         progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
 
         print(
-            f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f} | Eval BAC: {balanced_accuracy_score(y.cpu().numpy(), output.cpu().numpy() > 0.5):.4f}"
+            f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f} | Eval BAC: {balanced_accuracy_score(all_eval_labels, [int(p > 0.5) for p in all_eval_preds]):.4f}"
         )
 
         if epoch % 20 == 0 and epoch != 0:
