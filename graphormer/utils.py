@@ -1,6 +1,7 @@
-from sklearn.metrics import balanced_accuracy_score, roc_auc_score
+from typing import Dict, Optional
+
 import torch
-from typing import Dict
+from sklearn.metrics import balanced_accuracy_score, roc_auc_score
 
 
 def decrease_to_max_value(x, max_value):
@@ -20,7 +21,8 @@ def difference_idxs(a, b, epsilon=1e-6) -> torch.Tensor:
     for idx in indices:
         idx_tuple = tuple(idx.tolist())
         print(
-            f"Index: {idx_tuple}, Tensor1 Value: {a[idx_tuple]}, Tensor2 Value: {b[idx_tuple]}, Diff: {a[idx_tuple] - b[idx_tuple]}"
+            f"Index: {idx_tuple}, Tensor1 Value: {a[idx_tuple]}, Tensor2 Value: {
+                b[idx_tuple]}, Diff: {a[idx_tuple] - b[idx_tuple]}"
         )
     return indices
 
@@ -29,8 +31,8 @@ def save_model_weights(
     model: torch.nn.Module,
     epoch: int,
     optimizer: torch.optim.Optimizer,
-    lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None,
-    last_train_loss: float = None,
+    lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
+    last_train_loss: Optional[float] = None,
     model_name: str = "Graphormer",
 ) -> None:
     """
@@ -48,8 +50,8 @@ def save_model_weights(
         None
     """
 
-    from datetime import datetime
     import os
+    from datetime import datetime
 
     folder_save_path = "pretrained_models"
     if not os.path.exists(folder_save_path):
@@ -57,7 +59,8 @@ def save_model_weights(
 
     c_date = datetime.now().strftime("%d-%m-%y")
 
-    name: str = f"{folder_save_path}/{model_name}_checkpoint-{epoch}_{c_date}.pt"
+    name: str = f"{
+        folder_save_path}/{model_name}_checkpoint-{epoch}_{c_date}.pt"
 
     checkpoint = {
         "model_state_dict": model.state_dict(),
@@ -86,9 +89,9 @@ def print_model_parameters_table(parameters_dict: Dict[str, int | float]):
     Returns:
         None
     """
-    from rich.table import Table
-    from rich.console import Console
     from rich import box
+    from rich.console import Console
+    from rich.table import Table
 
     console = Console()
 

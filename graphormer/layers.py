@@ -73,20 +73,19 @@ class SpatialEncoding(nn.Module):
 
     def forward(self, x: torch.Tensor, paths: torch.Tensor) -> torch.Tensor:
         """
-        :param x: node embedding
-        :param paths: pairwise node paths
+        :param x: node embedding, shape: (num_nodes, hidden_dim)
+        :param paths: pairwise node paths, shape: (num_nodes, num_nodes, max_path_length)
         :return: torch.Tensor, spatial encoding
         """
 
-        paths_flat = paths.flatten(0, 1).to(x.device)
-        paths_mask = (paths_flat != -1).to(x.device)
-        path_lengths = paths_mask.sum(dim=1)
+        paths_mask = (paths != -1).to(x.device)
+        path_lengths = paths_mask.sum(dim=2)
         length_mask = path_lengths != 0
         max_lengths = torch.full_like(path_lengths, self.max_path_distance)
         b_idx = torch.minimum(path_lengths, max_lengths) - 1
         spatial_encoding = torch.zeros_like(b_idx, dtype=torch.float)
         spatial_encoding[length_mask] = self.b[b_idx][length_mask]
-        return spatial_encoding.reshape((x.shape[0], x.shape[0]))
+        return spatial_encoding
 
 
 class EdgeEncoding(nn.Module):
@@ -264,4 +263,3 @@ class GraphormerEncoderLayer(nn.Module):
         ffn_output = self.ffn(ffn_input) + att_output
 
         return ffn_output
-
