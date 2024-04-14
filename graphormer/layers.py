@@ -108,50 +108,35 @@ class EdgeEncoding(nn.Module):
     ) -> torch.Tensor:
         """
         :param x: node feature matrix, shape (num_nodes, hidden_dim)
-        :param edge_attr: edge feature matrix, shape (num_edges, edge_dim)
+        :param edge_embedding: edge feature matrix, shape (num_edges, edge_dim)
         :param edge_paths: pairwise node paths in edge indexes, shape (num_nodes, num_nodes, max_path_len)
         :return: torch.Tensor, Edge Encoding
         """
-        # shape (num_nodes**2, max_path_len)
-        edge_paths_flat = edge_paths.flatten(0, 1).to(x.device)
+        edge_mask = (edge_paths != -1).to(x.device)
+        path_lengths = edge_mask.sum(dim=2)
 
-        edge_mask = (edge_paths_flat != -1).to(x.device)
-        edge_indices = torch.where(edge_mask, edge_paths_flat, 0).to(x.device)
-        path_lengths = edge_mask.sum(dim=1)
+        # Get the edge embeddings for each edge in the paths (when defined)
+        edge_path_embeddings = torch.full(
+            (x.shape[0], x.shape[0], self.max_path_distance, x.shape[1]),
+            0,
+            dtype=torch.float).to(x.device)
+        edge_path_embeddings[edge_mask] = edge_embedding[edge_paths].to(x.device)[
+            edge_mask]
 
-        selected_edges = edge_embedding[edge_indices].to(x.device)
+        # Get sum of embeddings * self.edge_vector for edge in the path,
+        # then sum the result for each path
+        edge_path_encoding = (edge_path_embeddings *
+                              self.edge_vector.unsqueeze(0).unsqueeze(0)).sum(dim=-1).sum(dim=-1)
 
-        path_attrs = torch.full(selected_edges.shape, -1, dtype=torch.float).to(
-            x.device
-        )
-        path_attrs[edge_mask] = selected_edges[edge_mask].to(x.device)
-
-        valid_row_mask = (path_attrs != -1).any(dim=2).to(x.device)
-
-        extended_edge_vector = (
-            self.edge_vector.unsqueeze(0).expand_as(path_attrs).to(x.device)
-        )
-
-        # shape (num_nodes ** 2, max_path_len, edge_dim)
-        masked_path_attrs = torch.where(
-            valid_row_mask.unsqueeze(-1), path_attrs, 0.0
-        ).to(x.device)
-
-        edge_encoding = torch.full((edge_paths_flat.shape[0], self.edge_embedding_dim), 0.0).to(
-            x.device
-        )
-        edge_encoding = (
-            (extended_edge_vector * masked_path_attrs).sum(dim=2).to(x.device)
-        )
-        # Find the mean based on the path lengths
-        edge_encoding = edge_encoding.sum(dim=1)
-
+        # Find the mean embedding based on the path lengths
+        # shape: (num_nodes, num_nodes)
         non_empty_paths = path_lengths != 0
-        edge_encoding[non_empty_paths] = edge_encoding[non_empty_paths].div(
+
+        edge_path_encoding[non_empty_paths] = edge_path_encoding[non_empty_paths].div(
             path_lengths[non_empty_paths]
         )
 
-        return edge_encoding.reshape((x.shape[0], x.shape[0])).to(x.device)
+        return edge_path_encoding.to(x.device)
 
 
 class GraphormerMultiHeadAttention(nn.Module):
