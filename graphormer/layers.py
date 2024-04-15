@@ -189,6 +189,9 @@ class GraphormerMultiHeadAttention(nn.Module):
         batch_mask = (spatial_encoding == 0).unsqueeze(0).expand_as(a)
         a[batch_mask] = -1e6
         a = torch.softmax(a, dim=-1)
+        mask = torch.full_like(a, 1).to(x.device)
+        mask[batch_mask] = 0
+        a = a * mask
         a = self.att_dropout(a)
         out = a @ v_x
         out = out.transpose(0, 1).flatten(1, 2)
