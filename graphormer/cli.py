@@ -1,19 +1,16 @@
 import click
 import torch
+from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn.pool import global_mean_pool
 from tqdm import tqdm
-from sklearn.metrics import balanced_accuracy_score
 
 from data.data_cleaning import HonmaDataset
 from graphormer.model import Graphormer
-from graphormer.utils import (
-    save_model_weights,
-    print_model_parameters_table,
-)
+from graphormer.utils import print_model_parameters_table, save_model_weights
 
 
 @click.command()
@@ -82,7 +79,9 @@ def train(
         [i for i in range(len(dataset))], test_size=test_size, random_state=random_state
     )
     train_loader = DataLoader(
-        Subset(dataset, train_ids), batch_size=batch_size  # type: ignore
+        Subset(dataset, train_ids),  # type: ignore
+        batch_size=batch_size,
+        shuffle=True,
     )
     test_loader = DataLoader(
         Subset(dataset, test_ids), batch_size=batch_size  # type: ignore
@@ -112,7 +111,7 @@ def train(
             optimizer.zero_grad()
             model_out = model(batch)
             output = global_mean_pool(model_out, batch.batch)
-            loss = loss_function(output, y.unsqueeze(1))
+            loss = loss_function(output, y[:output.shape[0]].unsqueeze(1))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(), clip_grad_norm, error_if_nonfinite=True
@@ -149,11 +148,13 @@ def train(
         progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
 
         print(
-            f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f} | Eval BAC: {balanced_accuracy_score(all_eval_labels, [int(p > 0.5) for p in all_eval_preds]):.4f}"
+            f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f} | Eval BAC: {
+                balanced_accuracy_score(all_eval_labels, [int(p > 0.5) for p in all_eval_preds]):.4f}"
         )
 
         if epoch % 20 == 0 and epoch != 0:
-            save_model_weights(model, epoch, optimizer, last_train_loss=avg_loss)
+            save_model_weights(model, epoch, optimizer,
+                               last_train_loss=avg_loss)
 
     progress_bar.close()
 

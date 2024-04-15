@@ -174,22 +174,24 @@ class GraphormerMultiHeadAttention(nn.Module):
         edge_encoding: torch.Tensor,
     ) -> torch.Tensor:
         """
-        :param x: node embedding
-        :param spatial_encoding: spatial Encoding matrix
-        :param edge_encoding: edge encoding matrix
+        :param x: node embedding, shape: (num_nodes, hidden_dim)
+        :param spatial_encoding: spatial encoding matrix, shape (num_nodes, num_nodes)
+        :param edge_encoding: edge encoding matrix, shape (num_nodes, num_nodes)
         :return: torch.Tensor, node embeddings after all attention heads
         """
-        q = self.linear_q(x).view(x.shape[1], x.shape[0], self.num_heads)
-        k = self.linear_k(x).view(x.shape[1], x.shape[0], self.num_heads)
-        v = self.linear_v(x).view(x.shape[1], x.shape[0], self.num_heads)
+        q_x = self.linear_q(x).view(self.num_heads, *x.shape)
+        k_x = self.linear_k(x).view(self.num_heads, *x.shape)
+        v_x = self.linear_v(x).view(self.num_heads, *x.shape)
 
-        k = k.transpose(1, 2)
-        a = (q @ k) * self.scale
+        k_x_t = k_x.transpose(1, 2)
+        a = (q_x @ k_x_t) * self.scale
         a = a + spatial_encoding + edge_encoding
-        a = torch.softmax(a, dim=2)
+        batch_mask = (spatial_encoding == 0).unsqueeze(0).expand_as(a)
+        a[batch_mask] = -1e6
+        a = torch.softmax(a, dim=-1)
         a = self.att_dropout(a)
-        out = a @ v
-        out = out.reshape((x.shape[0], self.num_heads * x.shape[1]))
+        out = a @ v_x
+        out = out.transpose(0, 1).flatten(1, 2)
         return self.linear_out(out)
 
 
