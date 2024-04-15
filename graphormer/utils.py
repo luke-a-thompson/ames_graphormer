@@ -1,6 +1,7 @@
 from typing import Dict, Optional
 
 import torch
+import torch.nn as nn
 from sklearn.metrics import balanced_accuracy_score, roc_auc_score
 
 
@@ -9,9 +10,9 @@ def decrease_to_max_value(x, max_value):
     return x
 
 
-def eval_metrics(y_true, y_pred):
-    y_true, y_pred = y_true.detach().cpu(), y_pred.detach().cpu()
-    return {balanced_accuracy_score(y_true, y_pred), roc_auc_score(y_true, y_pred)}
+def monte_carlo_dropout(m):
+    if type(m) == nn.Dropout:
+        m.train()
 
 
 def difference_idxs(a, b, epsilon=1e-6) -> torch.Tensor:
@@ -21,16 +22,16 @@ def difference_idxs(a, b, epsilon=1e-6) -> torch.Tensor:
     for idx in indices:
         idx_tuple = tuple(idx.tolist())
         print(
-            f"Index: {idx_tuple}, Tensor1 Value: {a[idx_tuple]}, Tensor2 Value: {
-                b[idx_tuple]}, Diff: {a[idx_tuple] - b[idx_tuple]}"
+            f"Index: {idx_tuple}, Tensor1 Value: {a[idx_tuple]}, Tensor2 Value: {b[idx_tuple]}, Diff: {a[idx_tuple] - b[idx_tuple]}"
         )
     return indices
 
 
 def save_model_weights(
     model: torch.nn.Module,
-    epoch: int,
+    hyperparameters: Dict[str, int | float],
     optimizer: torch.optim.Optimizer,
+    epochs: int,
     lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
     last_train_loss: Optional[float] = None,
     model_name: str = "Graphormer",
@@ -59,12 +60,12 @@ def save_model_weights(
 
     c_date = datetime.now().strftime("%d-%m-%y")
 
-    name: str = f"{
-        folder_save_path}/{model_name}_checkpoint-{epoch}_{c_date}.pt"
+    name: str = f"{folder_save_path}/{model_name}_checkpoint-{epochs}_{c_date}.pt"
 
     checkpoint = {
-        "model_state_dict": model.state_dict(),
-        "epoch": epoch,  # Assuming epoch indexing starts at 0
+        "state_dict": model.state_dict(),
+        "hyperparameters": hyperparameters,
+        "epoch": epochs,  # Assuming epoch indexing starts at 0
         "optimizer_state_dict": optimizer.state_dict(),
         "scheduler_state_dict": [
             None if lr_scheduler is None else lr_scheduler.state_dict()
@@ -77,6 +78,52 @@ def save_model_weights(
         print(f"Checkpoint successfully saved to {name}")
     except Exception as e:
         print(f"Failed to save {name}. Error: {e}")
+
+
+def model_init_print(
+    model_parameters: Dict[str, int | float], model=None, input_size=None
+) -> Dict[str, int | float]:
+    from torchinfo import summary
+
+    if model and input_size:
+        summary(model)
+
+    print_model_parameters_table(model_parameters)
+    save_model_parameters(model_parameters)
+
+    return model_parameters
+
+
+def save_model_parameters(
+    model_parameters: dict[str, int | float]
+) -> dict[str, int | float]:
+    """
+    Cleans the specified model parameters by removing any keys that are not in the keep_keys list.
+
+    Args:
+        model_parameters (dict[str, int | float]): The model parameters to be saved.
+
+    Returns:
+        dict[str, int | float]: The saved model parameters.
+
+    """
+    keep_keys = [
+        "num_layers",
+        "hidden_dim",
+        "edge_embedding_dim",
+        "ffn_hidden_dim",
+        "n_heads",
+        "max_in_degree",
+        "max_out_degree",
+        "max_path_distance",
+    ]
+
+    keys_to_remove = [k for k in model_parameters if k not in keep_keys]
+
+    for k in keys_to_remove:
+        model_parameters.pop(k, None)
+
+    return model_parameters
 
 
 def print_model_parameters_table(parameters_dict: Dict[str, int | float]):

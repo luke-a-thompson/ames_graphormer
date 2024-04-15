@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from data.data_cleaning import HonmaDataset
 from graphormer.model import Graphormer
-from graphormer.utils import print_model_parameters_table, save_model_weights
+from graphormer.utils import model_init_print, save_model_weights
 
 
 @click.command()
@@ -57,7 +57,7 @@ def train(
     epochs: int,
 ):
     model_parameters = locals().copy()
-    print_model_parameters_table(model_parameters)
+
     torch.manual_seed(random_state)
     device = torch.device(torch_device)
     dataset = HonmaDataset(data)
@@ -74,6 +74,7 @@ def train(
         max_out_degree=max_out_degree,
         max_path_distance=max_path_distance,
     )
+    model_init_print(model_parameters, model, dataset.num_node_features)
 
     test_ids, train_ids = train_test_split(
         [i for i in range(len(dataset))], test_size=test_size, random_state=random_state
@@ -111,7 +112,7 @@ def train(
             optimizer.zero_grad()
             model_out = model(batch)
             output = global_mean_pool(model_out, batch.batch)
-            loss = loss_function(output, y[:output.shape[0]].unsqueeze(1))
+            loss = loss_function(output, y[: output.shape[0]].unsqueeze(1))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(), clip_grad_norm, error_if_nonfinite=True
@@ -148,31 +149,61 @@ def train(
         progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
 
         print(
-            f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f} | Eval BAC: {
-                balanced_accuracy_score(all_eval_labels, [int(p > 0.5) for p in all_eval_preds]):.4f}"
+            f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f} | Eval BAC: {balanced_accuracy_score(all_eval_labels, [int(p > 0.5) for p in all_eval_preds]):.4f}"
         )
 
         if epoch % 20 == 0 and epoch != 0:
-            save_model_weights(model, epoch, optimizer,
-                               last_train_loss=avg_loss)
+            save_model_weights(
+                model, model_parameters, optimizer, epoch, last_train_loss=avg_loss
+            )
 
     progress_bar.close()
 
 
+@click.command()
+@click.option("--data", default="data")
+@click.option("--monte_carlo_dropout", default=False)
+@click.option(
+    "--state_dict", default="pretrained_models/Graphormer_checkpoint-1_15-04-24.pt"
+)
+@click.option("--random_state", default=42)
+@click.option("--batch_size", default=4)
+@click.option("--torch_device", default="cuda")
 def inference(
-    model_path: str,
-    dataset: str,
+    data: str,
+    monte_carlo_dropout: bool,
+    state_dict: str,
+    random_state: int,
+    batch_size: int,
     torch_device: str,
 ) -> torch.Tensor:
+    state_dict = torch.load(state_dict)
+
+    dataset = HonmaDataset(data)
+
     device = torch.device(torch_device)
-    dataset = HonmaDataset("data")
-    model = torch.load(model_path, map_location=device)
+    model = Graphormer(
+        **state_dict["hyperparameters"],
+        node_feature_dim=dataset.num_node_features,
+        edge_feature_dim=dataset.num_edge_features,
+        output_dim=dataset[0].y.shape[0],
+    )
+    Graphormer.load_state_dict(state_dict["state_dict"], strict=False)
+    torch.manual_seed(random_state)
 
-    inference_loader = DataLoader(dataset, device)
+    inference_loader = DataLoader(dataset, batch_size, device)
 
-    model.eval()
+    if not monte_carlo_dropout:
+        model.eval()
 
-    with torch.no_grad:
-        output = model(inference_loader)
+        with torch.no_grad:
+            output = model(inference_loader)
+    else:
+        from utils import monte_carlo_dropout
+
+        model.eval()
+        model.apply(monte_carlo_dropout)
+
+        raise NotImplementedError("Monte Carlo Dropout not implemented yet")
 
     return output
