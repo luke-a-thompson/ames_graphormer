@@ -36,6 +36,7 @@ def floyd_warshall_source_to_all(
                 continue
             visited_nodes.add(w)
 
+            # reindex start to 0 as subgraphs from megagraph retain original node indices (e.g. 9 if its the 2nd graph)
             v_row_idx = v - start_idx
             w_row_idx = w - start_idx
             node_paths[w_row_idx] = node_paths[v_row_idx]
@@ -83,9 +84,9 @@ def all_pairs_shortest_path(
 
 def shortest_path_distance(data: Data) -> Tuple[torch.Tensor, torch.Tensor]:
     G: nx.DiGraph = to_networkx(data)
-    idxs = [i for i in range(data.ptr[-1])]
-    subgraph_idxs = [data.ptr[i: i + 2] for i in range(data.ptr.shape[0] - 1)]
-    subgraphs = [G.subgraph(idxs[x[0]: x[1]]) for x in subgraph_idxs]
+    idxs: List[int] = [i for i in range(data.ptr[-1])]
+    subgraph_idxs: List[int, int] = [data.ptr[i: i + 2] for i in range(data.ptr.shape[0] - 1)]  # I.e. ptr = [0, 9, 18, 27, 36] -> [[0, 9], [9, 18], [18, 27], [27, 36]]
+    subgraphs: torch.Tensor = [G.subgraph(idxs[x[0]: x[1]]) for x in subgraph_idxs]
     sub_node_paths_list = []
     sub_edge_paths_list = []
     for graph in subgraphs:

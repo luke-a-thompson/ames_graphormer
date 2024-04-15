@@ -1,4 +1,3 @@
-
 import torch
 from torch import nn
 from torch_geometric.utils import degree
@@ -7,9 +6,7 @@ from graphormer.utils import decrease_to_max_value
 
 
 class FeedForwardNetwork(nn.Module):
-    def __init__(
-        self, in_dim: int, hidden_dim: int, out_dim: int, dropout_rate: float
-    ):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, dropout_rate: float):
         super(FeedForwardNetwork, self).__init__()
 
         self.layer1 = nn.Linear(in_dim, hidden_dim)
@@ -91,7 +88,12 @@ class SpatialEncoding(nn.Module):
 class EdgeEncoding(nn.Module):
     def __init__(self, edge_embedding_dim: int, max_path_distance: int):
         """
-        :param edge_dim: edge feature matrix number of dimension
+        Initializes a new instance of the EdgeEncoding.
+
+        Args:
+            edge_embedding_dim (int): The dimension of the edge embeddings.
+            max_path_distance (int): The maximum path distance.
+
         """
         super().__init__()
         self.edge_embedding_dim = edge_embedding_dim
@@ -109,7 +111,7 @@ class EdgeEncoding(nn.Module):
         """
         :param x: node feature matrix, shape (num_nodes, hidden_dim)
         :param edge_embedding: edge feature matrix, shape (num_edges, edge_dim)
-        :param edge_paths: pairwise node paths in edge indexes, shape (num_nodes, num_nodes, max_path_len)
+        :param edge_paths: pairwise node paths in edge indexes, shape (num_nodes, num_nodes, path of edge indexes to traverse from node_i to node_j where len(edge_paths) = max_path_length)
         :return: torch.Tensor, Edge Encoding
         """
         edge_mask = (edge_paths != -1).to(x.device)
@@ -119,14 +121,19 @@ class EdgeEncoding(nn.Module):
         edge_path_embeddings = torch.full(
             (x.shape[0], x.shape[0], self.max_path_distance, x.shape[1]),
             0,
-            dtype=torch.float).to(x.device)
+            dtype=torch.float,
+        ).to(x.device)
         edge_path_embeddings[edge_mask] = edge_embedding[edge_paths].to(x.device)[
-            edge_mask]
+            edge_mask
+        ]
 
         # Get sum of embeddings * self.edge_vector for edge in the path,
         # then sum the result for each path
-        edge_path_encoding = (edge_path_embeddings *
-                              self.edge_vector.unsqueeze(0).unsqueeze(0)).sum(dim=-1).sum(dim=-1)
+        edge_path_encoding = (
+            (edge_path_embeddings * self.edge_vector.unsqueeze(0).unsqueeze(0))
+            .sum(dim=-1)
+            .sum(dim=-1)
+        )
 
         # Find the mean embedding based on the path lengths
         # shape: (num_nodes, num_nodes)
@@ -140,12 +147,7 @@ class EdgeEncoding(nn.Module):
 
 
 class GraphormerMultiHeadAttention(nn.Module):
-    def __init__(
-        self,
-        num_heads: int,
-        hidden_dim: int,
-        dropout_rate: float = 0.1
-    ):
+    def __init__(self, num_heads: int, hidden_dim: int, dropout_rate: float = 0.1):
         """
         :param num_heads: number of attention heads
         :param d_x: node feature matrix input number of dimension
@@ -154,18 +156,14 @@ class GraphormerMultiHeadAttention(nn.Module):
         super().__init__()
         self.num_heads = num_heads
 
-        self.scale = hidden_dim ** -0.5
+        self.scale = hidden_dim**-0.5
         self.hidden_dim = hidden_dim
-        self.linear_q = nn.Linear(
-            hidden_dim, hidden_dim * num_heads, bias=False)
-        self.linear_k = nn.Linear(
-            hidden_dim, hidden_dim * num_heads, bias=False)
-        self.linear_v = nn.Linear(
-            hidden_dim, hidden_dim * num_heads, bias=False)
+        self.linear_q = nn.Linear(hidden_dim, hidden_dim * num_heads, bias=False)
+        self.linear_k = nn.Linear(hidden_dim, hidden_dim * num_heads, bias=False)
+        self.linear_v = nn.Linear(hidden_dim, hidden_dim * num_heads, bias=False)
         self.att_dropout = nn.Dropout(dropout_rate)
 
-        self.linear_out = nn.Linear(
-            hidden_dim * num_heads, hidden_dim, bias=False)
+        self.linear_out = nn.Linear(hidden_dim * num_heads, hidden_dim, bias=False)
 
     def forward(
         self,
@@ -218,8 +216,7 @@ class GraphormerEncoderLayer(nn.Module):
         self.ln_1 = nn.LayerNorm(hidden_dim)
         self.ln_2 = nn.LayerNorm(hidden_dim)
         self.ffn_norm = nn.LayerNorm(hidden_dim)
-        self.ffn = FeedForwardNetwork(
-            hidden_dim, ffn_dim, hidden_dim, ffn_dropout)
+        self.ffn = FeedForwardNetwork(hidden_dim, ffn_dim, hidden_dim, ffn_dropout)
 
     def forward(
         self,
@@ -246,8 +243,7 @@ class GraphormerEncoderLayer(nn.Module):
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
         att_input = self.att_norm(x)
-        att_output = self.attention(
-            att_input, spatial_encoding, edge_encoding) + x
+        att_output = self.attention(att_input, spatial_encoding, edge_encoding) + x
 
         ffn_input = self.ffn_norm(att_output)
         ffn_output = self.ffn(ffn_input) + att_output
