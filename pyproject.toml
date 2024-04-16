@@ -14,21 +14,21 @@ inference = "graphormer.cli:inference"
 include = "graphormer"
 
 [tool.poetry.dependencies]
-python = "^3.11"
-torch = {version = "^2.2.2+cu118", source="pytorch-gpu-src-cu118"}
+python = "^3.12"
+torch = {version = "^2.2.2+cu121", source="pytorch-gpu-src-cu121"}
 torch-geometric = "^2.5.2"
-networkx = "^3.3"
 click = "^8.1.7"
 scikit-learn = "^1.4.1"
 tqdm = "^4.66.2"
 pandas = "^2.2.1"
 rich = "^13.7.1"
 torchinfo = "^1.8.0"
+gnn_tools = {path = "./gnn-tools", develop=true}
 
 
 [[tool.poetry.source]]
-name = "pytorch-gpu-src-cu118"
-url = "https://download.pytorch.org/whl/cu118"
+name = "pytorch-gpu-src-cu121"
+url = "https://download.pytorch.org/whl/cu121"
 priority = "explicit"
 
 # [[tool.poetry.source]]

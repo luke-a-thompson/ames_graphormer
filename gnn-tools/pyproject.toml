@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "gnn-tools"
+version = "0.1.2"
+description = ""
+authors = ["Josiah Evans"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pytest = "^8.1.1"
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"

@@ -112,7 +112,7 @@ class Graphormer(nn.Module):
         spatial_encoding = self.spatial_encoding(x, node_paths)
 
         for layer in self.layers:
-            x = layer(x, spatial_encoding, edge_encoding)
+            x = layer(x, spatial_encoding, edge_encoding, data.ptr)
 
         x = self.out_lin(x)
 

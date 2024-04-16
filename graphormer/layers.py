@@ -71,12 +71,12 @@ class SpatialEncoding(nn.Module):
     def forward(self, x: torch.Tensor, paths: torch.Tensor) -> torch.Tensor:
         """
         :param x: node embedding, shape: (num_nodes, hidden_dim)
-        :param paths: pairwise node paths, shape: (num_nodes, num_nodes, max_path_length)
+        :param paths: pairwise node paths, shape: (num_pairwaise_paths, max_path_length)
         :return: torch.Tensor, spatial encoding
         """
 
         paths_mask = (paths != -1).to(x.device)
-        path_lengths = paths_mask.sum(dim=2)
+        path_lengths = paths_mask.sum(dim=-1)
         length_mask = path_lengths != 0
         max_lengths = torch.full_like(path_lengths, self.max_path_distance)
         b_idx = torch.minimum(path_lengths, max_lengths) - 1
@@ -111,15 +111,15 @@ class EdgeEncoding(nn.Module):
         """
         :param x: node feature matrix, shape (num_nodes, hidden_dim)
         :param edge_embedding: edge feature matrix, shape (num_edges, edge_dim)
-        :param edge_paths: pairwise node paths in edge indexes, shape (num_nodes, num_nodes, path of edge indexes to traverse from node_i to node_j where len(edge_paths) = max_path_length)
+        :param edge_paths: pairwise node paths in edge indexes, shape (sum(num_nodes ** 2 for each graph in the batch), path of edge indexes to traverse from node_i to node_j where len(edge_paths) = max_path_length)
         :return: torch.Tensor, Edge Encoding
         """
         edge_mask = (edge_paths != -1).to(x.device)
-        path_lengths = edge_mask.sum(dim=2)
+        path_lengths = edge_mask.sum(dim=-1)
 
         # Get the edge embeddings for each edge in the paths (when defined)
         edge_path_embeddings = torch.full(
-            (x.shape[0], x.shape[0], self.max_path_distance, x.shape[1]),
+            (edge_paths.shape[0], self.max_path_distance, x.shape[1]),
             0,
             dtype=torch.float,
         ).to(x.device)
@@ -130,13 +130,11 @@ class EdgeEncoding(nn.Module):
         # Get sum of embeddings * self.edge_vector for edge in the path,
         # then sum the result for each path
         edge_path_encoding = (
-            (edge_path_embeddings * self.edge_vector.unsqueeze(0).unsqueeze(0))
-            .sum(dim=-1)
-            .sum(dim=-1)
+            (edge_path_embeddings * self.edge_vector).sum(dim=1).sum(dim=-1)
         )
 
         # Find the mean embedding based on the path lengths
-        # shape: (num_nodes, num_nodes)
+        # shape: (num_node_pairs)
         non_empty_paths = path_lengths != 0
 
         edge_path_encoding[non_empty_paths] = edge_path_encoding[non_empty_paths].div(
@@ -158,42 +156,65 @@ class GraphormerMultiHeadAttention(nn.Module):
 
         self.scale = hidden_dim**-0.5
         self.hidden_dim = hidden_dim
-        self.linear_q = nn.Linear(hidden_dim, hidden_dim * num_heads, bias=False)
-        self.linear_k = nn.Linear(hidden_dim, hidden_dim * num_heads, bias=False)
-        self.linear_v = nn.Linear(hidden_dim, hidden_dim * num_heads, bias=False)
+        assert hidden_dim % num_heads == 0, f"hidden_dim {
+            hidden_dim} must be divisible by num_heads {num_heads}"
+        self.head_size = hidden_dim // num_heads
+        self.linear_q = nn.Linear(
+            hidden_dim, hidden_dim, bias=False)
+        self.linear_k = nn.Linear(
+            hidden_dim, hidden_dim, bias=False)
+        self.linear_v = nn.Linear(
+            hidden_dim, hidden_dim, bias=False)
         self.att_dropout = nn.Dropout(dropout_rate)
 
-        self.linear_out = nn.Linear(hidden_dim * num_heads, hidden_dim, bias=False)
+        self.linear_out = nn.Linear(
+            hidden_dim, hidden_dim, bias=False)
 
     def forward(
         self,
         x: torch.Tensor,
         spatial_encoding: torch.Tensor,
         edge_encoding: torch.Tensor,
+        ptr: torch.Tensor,
     ) -> torch.Tensor:
         """
         :param x: node embedding, shape: (num_nodes, hidden_dim)
-        :param spatial_encoding: spatial encoding matrix, shape (num_nodes, num_nodes)
-        :param edge_encoding: edge encoding matrix, shape (num_nodes, num_nodes)
+        :param spatial_encoding: spatial encoding matrix, shape (num_node_pairs)
+        :param edge_encoding: edge encoding matrix, shape (num_node_pairs)
         :return: torch.Tensor, node embeddings after all attention heads
         """
-        q_x = self.linear_q(x).view(self.num_heads, *x.shape)
-        k_x = self.linear_k(x).view(self.num_heads, *x.shape)
-        v_x = self.linear_v(x).view(self.num_heads, *x.shape)
+        subgraph_idxs = [ptr[i: i + 2].tolist()
+                         for i in range(ptr.shape[0] - 1)]
 
-        k_x_t = k_x.transpose(1, 2)
-        a = (q_x @ k_x_t) * self.scale
-        a = a + spatial_encoding + edge_encoding
-        batch_mask = (spatial_encoding == 0).unsqueeze(0).expand_as(a)
-        a[batch_mask] = -1e6
-        a = torch.softmax(a, dim=-1)
-        mask = torch.full_like(a, 1).to(x.device)
-        mask[batch_mask] = 0
-        a = a * mask
-        a = self.att_dropout(a)
-        out = a @ v_x
-        out = out.transpose(0, 1).flatten(1, 2)
-        return self.linear_out(out)
+        attn_list = []
+        for idx_range in subgraph_idxs:
+            start_index = len(attn_list)
+            num_nodes = idx_range[1] - idx_range[0]
+            x_subgraph = x[idx_range[0]: idx_range[1]]
+            q_x = self.linear_q(x_subgraph).view(
+                self.num_heads, x_subgraph.shape[0], self.head_size)
+            k_x = self.linear_k(x_subgraph).view(
+                self.num_heads, x_subgraph.shape[0], self.head_size)
+            v_x = self.linear_v(x_subgraph).view(
+                self.num_heads, x_subgraph.shape[0], self.head_size)
+            spatial_subgraph = spatial_encoding[
+                start_index: start_index + num_nodes**2
+            ]
+            edge_subgraph = edge_encoding[start_index: start_index + num_nodes**2]
+
+            k_x_t = k_x.transpose(1, 2)
+            a = (q_x @ k_x_t) * self.scale
+            a += spatial_subgraph.view(a.shape[1], a.shape[1]) + edge_subgraph.view(
+                a.shape[1], a.shape[1]
+            )
+            a = torch.softmax(a, dim=-1)
+            a @= v_x
+            a = self.att_dropout(a)
+            attn_list.append(a.transpose(0, 1).flatten(1, 2))
+
+        attn = torch.cat(attn_list)
+
+        return self.linear_out(attn)
 
 
 class GraphormerEncoderLayer(nn.Module):
@@ -216,13 +237,15 @@ class GraphormerEncoderLayer(nn.Module):
         self.ln_1 = nn.LayerNorm(hidden_dim)
         self.ln_2 = nn.LayerNorm(hidden_dim)
         self.ffn_norm = nn.LayerNorm(hidden_dim)
-        self.ffn = FeedForwardNetwork(hidden_dim, ffn_dim, hidden_dim, ffn_dropout)
+        self.ffn = FeedForwardNetwork(
+            hidden_dim, ffn_dim, hidden_dim, ffn_dropout)
 
     def forward(
         self,
         x: torch.Tensor,
         spatial_encoding: torch.Tensor,
         edge_encoding: torch.Tensor,
+        ptr: torch.Tensor,
     ) -> torch.Tensor:
         """
         Implements forward pass of the Graphormer encoder layer.
@@ -243,7 +266,8 @@ class GraphormerEncoderLayer(nn.Module):
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
         att_input = self.att_norm(x)
-        att_output = self.attention(att_input, spatial_encoding, edge_encoding) + x
+        att_output = self.attention(
+            att_input, spatial_encoding, edge_encoding, ptr) + x
 
         ffn_input = self.ffn_norm(att_output)
         ffn_output = self.ffn(ffn_input) + att_output
