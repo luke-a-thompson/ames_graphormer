@@ -3,6 +3,7 @@ import torch
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import train_test_split
 from torch import nn
+from torch.optim.lr_scheduler import PolynomialLR
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn.pool import global_mean_pool
@@ -34,6 +35,7 @@ from graphormer.utils import model_init_print, save_model_weights
 @click.option("--clip_grad_norm", default=5.0)
 @click.option("--torch_device", default="cuda")
 @click.option("--epochs", default=10)
+@click.option("--lr_power", default=0.5)
 def train(
     data: str,
     num_layers: int,
@@ -55,6 +57,7 @@ def train(
     clip_grad_norm: float,
     torch_device: str,
     epochs: int,
+    lr_power: float,
 ):
     model_parameters = locals().copy()
 
@@ -91,6 +94,8 @@ def train(
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=lr, betas=(b1, b2), weight_decay=weight_decay, eps=eps
     )
+    scheduler = PolynomialLR(optimizer, total_iters=epochs, power=lr_power)
+
     loss_function = nn.BCEWithLogitsLoss(reduction="sum")
     model.to(device)
 
@@ -123,6 +128,7 @@ def train(
             avg_loss = total_loss / (progress_bar.n + 1)
             progress_bar.set_postfix_str(f"Avg Loss: {avg_loss:.4f}")
             progress_bar.update()  # Increment the progress bar
+        scheduler.step()
 
         # Prepare for the evaluation phase
         progress_bar.reset(total=len(test_loader))
@@ -147,9 +153,12 @@ def train(
 
         avg_eval_loss = total_eval_loss / len(test_loader)
         progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
+        bac = balanced_accuracy_score(
+            all_eval_labels, [int(p > 0.5) for p in all_eval_preds])
 
         print(
-            f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {avg_eval_loss:.4f} | Eval BAC: {balanced_accuracy_score(all_eval_labels, [int(p > 0.5) for p in all_eval_preds]):.4f}"
+            f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
+                avg_eval_loss:.4f} | Eval BAC: {bac:.4f}"
         )
 
         if epoch % 20 == 0 and epoch != 0:

@@ -120,12 +120,11 @@ class EdgeEncoding(nn.Module):
         # Get the edge embeddings for each edge in the paths (when defined)
         edge_path_embeddings = torch.full(
             (edge_paths.shape[0], self.max_path_distance, x.shape[1]),
-            0,
-            dtype=torch.float,
+            0.,
+            dtype=edge_embedding.dtype
         ).to(x.device)
         edge_path_embeddings[edge_mask] = edge_embedding[edge_paths].to(x.device)[
-            edge_mask
-        ]
+            edge_mask]
 
         # Get sum of embeddings * self.edge_vector for edge in the path,
         # then sum the result for each path
@@ -159,16 +158,12 @@ class GraphormerMultiHeadAttention(nn.Module):
         assert hidden_dim % num_heads == 0, f"hidden_dim {
             hidden_dim} must be divisible by num_heads {num_heads}"
         self.head_size = hidden_dim // num_heads
-        self.linear_q = nn.Linear(
-            hidden_dim, hidden_dim, bias=False)
-        self.linear_k = nn.Linear(
-            hidden_dim, hidden_dim, bias=False)
-        self.linear_v = nn.Linear(
-            hidden_dim, hidden_dim, bias=False)
+        self.linear_q = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.linear_k = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.linear_v = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.att_dropout = nn.Dropout(dropout_rate)
 
-        self.linear_out = nn.Linear(
-            hidden_dim, hidden_dim, bias=False)
+        self.linear_out = nn.Linear(hidden_dim, hidden_dim, bias=False)
 
     def forward(
         self,
