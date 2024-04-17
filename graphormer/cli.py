@@ -2,6 +2,7 @@ import click
 import torch
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import train_test_split
+from tensorboardX import SummaryWriter
 from torch import nn
 from torch.optim.lr_scheduler import PolynomialLR
 from torch.utils.data import Subset
@@ -60,6 +61,8 @@ def train(
     lr_power: float,
 ):
     model_parameters = locals().copy()
+    writer = SummaryWriter(flush_secs=10)
+    writer.add_hparams(model_parameters, {})
 
     torch.manual_seed(random_state)
     device = torch.device(torch_device)
@@ -101,6 +104,8 @@ def train(
 
     progress_bar = tqdm(total=0, desc="Initializing...", unit="batch")
 
+    train_batch_num = 0
+    eval_batch_num = 0
     for epoch in range(epochs):
         total_loss = 0.0
         total_eval_loss = 0.0
@@ -123,12 +128,17 @@ def train(
                 model.parameters(), clip_grad_norm, error_if_nonfinite=True
             )
             optimizer.step()
-            total_loss += loss.item()
+            batch_loss = loss.item()
+            writer.add_scalar("train/batch_loss", batch_loss, train_batch_num)
+            total_loss += batch_loss
 
             avg_loss = total_loss / (progress_bar.n + 1)
+            writer.add_scalar("train/avg_loss", avg_loss, train_batch_num)
             progress_bar.set_postfix_str(f"Avg Loss: {avg_loss:.4f}")
             progress_bar.update()  # Increment the progress bar
+            train_batch_num += 1
         scheduler.step()
+        writer.add_scalar("train/lr", scheduler.get_last_lr(), epoch)
 
         # Prepare for the evaluation phase
         progress_bar.reset(total=len(test_loader))
@@ -144,17 +154,27 @@ def train(
             with torch.no_grad():
                 output = global_mean_pool(model(batch), batch.batch)
                 loss = loss_function(output, y.unsqueeze(1))
-            total_eval_loss += loss.item()
+            batch_loss = loss.item()
+            writer.add_scalar("eval/batch_loss", batch_loss, eval_batch_num)
+            total_eval_loss += batch_loss
 
-            all_eval_preds.extend(torch.sigmoid(output.detach().cpu()).numpy())
-            all_eval_labels.extend(y.cpu().numpy())
+            eval_preds = [int(p > 0.5) for p in torch.sigmoid(
+                output.detach().cpu()).numpy()]
+            eval_labels = y.cpu().numpy()
+            batch_bac = balanced_accuracy_score(eval_labels, eval_preds)
+            writer.add_scalar("eval/batch_bac", batch_bac, eval_batch_num)
+
+            all_eval_preds.extend(eval_preds)
+            all_eval_labels.extend(eval_labels)
 
             progress_bar.update()  # Manually increment for each batch in eval
+            eval_batch_num += 1
 
         avg_eval_loss = total_eval_loss / len(test_loader)
         progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
-        bac = balanced_accuracy_score(
-            all_eval_labels, [int(p > 0.5) for p in all_eval_preds])
+        bac = balanced_accuracy_score(all_eval_labels, all_eval_preds)
+        writer.add_scalar("eval/bac", bac, epoch)
+        writer.add_scalar("eval/avg_eval_loss", avg_eval_loss, epoch)
 
         print(
             f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
@@ -163,7 +183,7 @@ def train(
 
         if epoch % 20 == 0 and epoch != 0:
             save_model_weights(
-                model, model_parameters, optimizer, epoch, last_train_loss=avg_loss
+                model, model_parameters, optimizer, epoch, last_train_loss=avg_loss, lr_scheduler=scheduler
             )
 
     progress_bar.close()

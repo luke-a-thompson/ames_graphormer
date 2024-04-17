@@ -23,6 +23,7 @@ tqdm = "^4.66.2"
 pandas = "^2.2.1"
 rich = "^13.7.1"
 torchinfo = "^1.8.0"
+tensorboardX = "^2.6.2.2"
 gnn_tools = {path = "./gnn-tools", develop=true}
 
 [tool.black]
