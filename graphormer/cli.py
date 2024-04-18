@@ -55,6 +55,7 @@ class Scheduler(Enum):
 @click.option("--lr_smooth", default=True)
 @click.option("--lr_window", default=10)
 @click.option("--lr_reset", default=0)
+@click.option("--lr_factor", default=0.5)
 def train(
     data: str,
     num_layers: int,
@@ -86,6 +87,7 @@ def train(
     lr_smooth: bool,
     lr_window: int,
     lr_reset: int,
+    lr_factor: float,
 ):
     model_parameters = locals().copy()
     writer = SummaryWriter(flush_secs=10)
@@ -129,6 +131,7 @@ def train(
         scheduler = PolynomialLR(optimizer, total_iters=epochs, power=lr_power)
     elif scheduler_type == Scheduler.GREEDY.value:
         scheduler = GreedyLR(optimizer,
+                             factor=lr_factor,
                              min_lr=lr_min,
                              max_lr=lr_max,
                              cooldown=lr_cooldown,

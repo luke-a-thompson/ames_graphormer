@@ -108,9 +108,9 @@ class Graphormer(nn.Module):
         edge_paths = edge_paths.to(device)
         x = self.node_embedding(x)
         x = self.centrality_encoding(x, edge_index)
+        spatial_encoding = self.spatial_encoding(x, node_paths)
         edge_embedding = self.edge_embedding(edge_attr)
         edge_encoding = self.edge_encoding(x, edge_embedding, edge_paths)
-        spatial_encoding = self.spatial_encoding(x, node_paths)
 
         for layer in self.layers:
             x = layer(x, spatial_encoding, edge_encoding, data.ptr)

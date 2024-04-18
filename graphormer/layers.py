@@ -67,6 +67,8 @@ class SpatialEncoding(nn.Module):
         self.max_path_distance = max_path_distance
 
         self.b = nn.Parameter(torch.randn(self.max_path_distance))
+        self.t1 = nn.Parameter(torch.randn(1))
+        self.t1 = nn.Parameter(torch.randn(1))
 
     def forward(self, x: torch.Tensor, paths: torch.Tensor) -> torch.Tensor:
         """
@@ -75,6 +77,7 @@ class SpatialEncoding(nn.Module):
         :return: torch.Tensor, spatial encoding
         """
 
+        assert False, paths.shape
         paths_mask = (paths != -1).to(x.device)
         path_lengths = paths_mask.sum(dim=-1)
         length_mask = path_lengths != 0
@@ -82,6 +85,11 @@ class SpatialEncoding(nn.Module):
         b_idx = torch.minimum(path_lengths, max_lengths) - 1
         spatial_encoding = torch.zeros_like(b_idx, dtype=torch.float)
         spatial_encoding[length_mask] = self.b[b_idx][length_mask]
+
+        # Reset VNODE -> Node encodings
+
+        # Reset Node -> VNODE encodings
+
         return spatial_encoding
 
 
