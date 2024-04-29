@@ -25,28 +25,6 @@ def clean_hansen(hansen_dataset: Path | pd.DataFrame) -> pd.DataFrame:
     return hansen
 
 
-def clean_honma(honma_dataset: Path | pd.DataFrame) -> pd.DataFrame:
-    """
-    Cleans the Honma dataset by reading an Excel file, selecting specific columns,
-    renaming columns, and applying a transformation to the 'ames' column.
-
-    Args:
-        honma_dataset (Path or pd.DataFrame): The path to the Honma dataset Excel file
-            or a DataFrame containing the dataset.
-
-    Returns:
-        pd.DataFrame: The cleaned Honma dataset with columns 'smiles' and 'ames'.
-
-    """
-    honma = pd.read_excel(honma_dataset, sheet_name=0, skiprows=[1, 2], usecols="D,G")
-
-    honma = honma[[honma.columns[1], honma.columns[0]]]
-    honma.columns = ["smiles", "ames"]
-    honma["ames"] = honma["ames"].apply(lambda x: 1 if x == "A" or x == "B" else 0)
-
-    return honma
-
-
 class HonmaDataset(InMemoryDataset):
     def __init__(self, root, transform=None, pre_transform=None):
         super().__init__(root, transform, pre_transform)
@@ -54,7 +32,7 @@ class HonmaDataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        return ["Honma_Ames.xlsx"]
+        return ["Honma_New.xlsx"]
 
     @property
     def processed_file_names(self):
@@ -70,7 +48,7 @@ class HonmaDataset(InMemoryDataset):
         Returns:
             None
         """
-        honma = clean_honma(self.raw_paths[0])  # Clean the raw_file_names, idx[0]
+        honma = pd.read_excel(self.raw_paths[0])
 
         data_list = []
 
@@ -80,6 +58,7 @@ class HonmaDataset(InMemoryDataset):
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
+
 
 class HansenDataset(InMemoryDataset):
     def __init__(self, root, transform=None, pre_transform=None):
@@ -117,5 +96,5 @@ class HansenDataset(InMemoryDataset):
 
 
 if __name__ == "__main__":
-    dataset = HansenDataset("data")
+    dataset = HonmaDataset("data")
     print(len(dataset))
