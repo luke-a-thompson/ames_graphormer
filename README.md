@@ -10,10 +10,7 @@ Reimplemented to support the Ames-graphormer project for regulatory mutagenicity
 2. Spatial Encoding
 3. Edge Encoding
 4. Multi-Head Self-Attention
-
-# Warning
-This implementation differs from the original implementation in the paper in following ways:
-1. No [VNode] ([CLS] token analogue in BERT)
+5. VNODE global attention
 
 # Installation
 ## Requirements

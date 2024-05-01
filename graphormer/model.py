@@ -104,6 +104,24 @@ class Graphormer(nn.Module):
         edge_index = data.edge_index.long()
         edge_attr = data.edge_attr.float()
         node_paths, edge_paths = shortest_path_distance(data)
+        subgraph_idxs = [data.ptr[i : i + 2].tolist() for i in range(data.ptr.shape[0] - 1)]
+        vnode = torch.full_like(x[0], -1).unsqueeze(0)
+        offset = 0
+        end = offset
+        new_ptr = []
+        for start, end in subgraph_idxs:
+            if start == end:
+                continue
+
+            start = start + offset
+            end = end + offset
+            x = torch.cat((x[:start], vnode, x[start:end], x[end:]))
+            offset += 1
+            new_ptr.append(start)
+
+        new_ptr.append(end + 1)
+        data.ptr = torch.Tensor(new_ptr).int()
+
         node_paths = node_paths.to(device)
         edge_paths = edge_paths.to(device)
         x = self.node_embedding(x)
@@ -115,6 +133,8 @@ class Graphormer(nn.Module):
         for layer in self.layers:
             x = layer(x, spatial_encoding, edge_encoding, data.ptr)
 
-        x = self.out_lin(x)
+        # Output for each VNODE for each graph
+        vnode_outputs = x[data.ptr[:-1]]
+        out = self.out_lin(vnode_outputs)
 
-        return x
+        return out

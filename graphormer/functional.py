@@ -5,7 +5,7 @@ import torch
 from torch_geometric.data import Data
 
 
-def shortest_path_distance(data: Data) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def shortest_path_distance(data: Data) -> Tuple[torch.Tensor, torch.Tensor]:
     idxs = torch.Tensor([i for i in range(data.ptr[-1])]).long().to("cuda")
 
     # I.e. ptr = [0, 9, 18, 27, 36] -> [[0, 9], [9, 18], [18, 27], [27, 36]]
@@ -22,7 +22,7 @@ def shortest_path_distance(data: Data) -> Tuple[torch.Tensor, torch.Tensor, torc
         # Insert VNODE, disconnected to allow physical paths between nodes in SPD
         edges.insert(0, (0, 0))
 
-        sub_node_paths, sub_edge_paths = gnn_tools.shortest_paths(edges, 5)
+        sub_node_paths, sub_edge_paths = gnn_tools.shortest_paths(edges, 5)  # type: ignore
         sub_node_paths_tensor = torch.Tensor(sub_node_paths).int()
         sub_edge_paths_tensor = torch.Tensor(sub_edge_paths).int()
 
@@ -31,7 +31,9 @@ def shortest_path_distance(data: Data) -> Tuple[torch.Tensor, torch.Tensor, torc
         physical_nodes = torch.arange(1, sub_node_paths_tensor.shape[1]).view(-1, 1)
         zeros = torch.zeros_like(physical_nodes)
         vnode_paths = torch.cat((zeros, physical_nodes), dim=1)
+        # VNODE -> Node
         sub_node_paths_tensor[0, 1:, :2] = vnode_paths
+        # Node -> VNODE
         sub_node_paths_tensor[1:, 0, :2] = torch.flip(vnode_paths, dims=[1])
 
         # Connect VNODE edge paths
@@ -40,13 +42,16 @@ def shortest_path_distance(data: Data) -> Tuple[torch.Tensor, torch.Tensor, torc
             torch.max(sub_edge_paths_tensor).item() + 1,
             torch.max(sub_edge_paths_tensor).item() + sub_node_paths_tensor.shape[1],
         ).unsqueeze(-1)
+        # VNODE -> Node
         sub_edge_paths_tensor[0, 1:, :1] = extra_edge_idxs
+        # Node -> VNODE
         sub_edge_paths_tensor[1:, 0, :1] = extra_edge_idxs
 
-        sub_node_paths_list.append(sub_node_paths_tensor.flatten(0, 1))
-        sub_edge_paths_list.append(sub_edge_paths_tensor.flatten(0, 1))
-
-    # TODO:Need to return the indices of the VNODEs for spatial encoding
+        # Get indices for VNODE paths for spatial encoding
+        sub_node_paths_tensor_flat = sub_node_paths_tensor.flatten(0, 1)
+        sub_node_paths_list.append(sub_node_paths_tensor_flat)
+        sub_edge_paths_tensor_flat = sub_edge_paths_tensor.flatten(0, 1)
+        sub_edge_paths_list.append(sub_edge_paths_tensor_flat)
 
     # shape (sum(g.num_nodes ** 2 for g in graphs), max_path_len)
     node_paths = torch.cat(sub_node_paths_list)

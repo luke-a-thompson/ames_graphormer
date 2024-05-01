@@ -9,7 +9,6 @@ from torch import nn
 from torch.optim.lr_scheduler import PolynomialLR, ReduceLROnPlateau
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn.pool import global_mean_pool
 from tqdm import tqdm
 
 from data.data_cleaning import HonmaDataset
@@ -46,7 +45,11 @@ class Scheduler(Enum):
 @click.option("--torch_device", default="cuda")
 @click.option("--epochs", default=10)
 @click.option("--lr_power", default=0.5)
-@click.option("--scheduler_type", type=click.Choice([x.value for x in Scheduler], case_sensitive=False), default=Scheduler.GREEDY.value)
+@click.option(
+    "--scheduler_type",
+    type=click.Choice([x.value for x in Scheduler], case_sensitive=False),
+    default=Scheduler.GREEDY.value,
+)
 @click.option("--lr_patience", default=4)
 @click.option("--lr_cooldown", default=2)
 @click.option("--lr_min", default=1e-6)
@@ -119,31 +122,27 @@ def train(
         batch_size=batch_size,
         shuffle=True,
     )
-    test_loader = DataLoader(
-        Subset(dataset, test_ids), batch_size=batch_size  # type: ignore
-    )
+    test_loader = DataLoader(Subset(dataset, test_ids), batch_size=batch_size)  # type: ignore
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=lr, betas=(b1, b2), weight_decay=weight_decay, eps=eps
-    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, betas=(b1, b2), weight_decay=weight_decay, eps=eps)
     scheduler = None
     if scheduler_type == Scheduler.POLYNOMIAL.value:
         scheduler = PolynomialLR(optimizer, total_iters=epochs, power=lr_power)
     elif scheduler_type == Scheduler.GREEDY.value:
-        scheduler = GreedyLR(optimizer,
-                             factor=lr_factor,
-                             min_lr=lr_min,
-                             max_lr=lr_max,
-                             cooldown=lr_cooldown,
-                             patience=lr_patience,
-                             warmup=lr_warmup,
-                             smooth=lr_smooth,
-                             window_size=lr_window,
-                             reset=lr_reset,
-                             )
+        scheduler = GreedyLR(
+            optimizer,
+            factor=lr_factor,
+            min_lr=lr_min,
+            max_lr=lr_max,
+            cooldown=lr_cooldown,
+            patience=lr_patience,
+            warmup=lr_warmup,
+            smooth=lr_smooth,
+            window_size=lr_window,
+            reset=lr_reset,
+        )
     elif scheduler_type == Scheduler.PLATEAU.value:
-        scheduler = ReduceLROnPlateau(
-            optimizer, mode="min", patience=lr_patience, cooldown=lr_cooldown, min_lr=lr_min)
+        scheduler = ReduceLROnPlateau(optimizer, mode="min", patience=lr_patience, cooldown=lr_cooldown, min_lr=lr_min)
 
     assert scheduler is not None
 
@@ -168,18 +167,14 @@ def train(
             batch.to(device)
             y = batch.y.to(device)
             optimizer.zero_grad()
-            model_out = model(batch)
-            output = global_mean_pool(model_out, batch.batch)
+            output = model(batch)
             loss = loss_function(output, y[: output.shape[0]].unsqueeze(1))
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(), clip_grad_norm, error_if_nonfinite=True
-            )
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm, error_if_nonfinite=True)
             optimizer.step()
             batch_loss = loss.item()
             writer.add_scalar("train/batch_loss", batch_loss, train_batch_num)
-            writer.add_scalar("train/sample_loss", batch_loss /
-                              output.shape[0], train_batch_num)
+            writer.add_scalar("train/sample_loss", batch_loss / output.shape[0], train_batch_num)
             total_train_loss += batch_loss
 
             avg_loss = total_train_loss / (progress_bar.n + 1)
@@ -203,18 +198,16 @@ def train(
             batch.to(device)
             y = batch.y.to(device)
             with torch.no_grad():
-                output = global_mean_pool(model(batch), batch.batch)
+                output = model(batch)
                 loss = loss_function(output, y.unsqueeze(1))
             batch_loss: float = loss.item()
             writer.add_scalar("eval/batch_loss", batch_loss, eval_batch_num)
             total_eval_loss += batch_loss
 
-            eval_preds = [int(p > 0.5) for p in torch.sigmoid(
-                output.detach().cpu()).numpy()]
+            eval_preds = [int(p > 0.5) for p in torch.sigmoid(output.detach().cpu()).numpy()]
             eval_labels = y.cpu().numpy()
             if sum(eval_labels) > 0:
-                batch_bac = balanced_accuracy_score(
-                    eval_labels, eval_preds)
+                batch_bac = balanced_accuracy_score(eval_labels, eval_preds)
                 writer.add_scalar("eval/batch_bac", batch_bac, eval_batch_num)
 
             all_eval_preds.extend(eval_preds)
@@ -229,8 +222,7 @@ def train(
         avg_eval_loss = total_eval_loss / len(test_loader)
         progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
         bac = balanced_accuracy_score(all_eval_labels, all_eval_preds)
-        bac_adj = balanced_accuracy_score(
-            all_eval_labels, all_eval_preds, adjusted=True)
+        bac_adj = balanced_accuracy_score(all_eval_labels, all_eval_preds, adjusted=True)
         writer.add_scalar("eval/bac", bac, epoch)
         writer.add_scalar("eval/bac_adj", bac_adj, epoch)
         writer.add_scalar("eval/avg_eval_loss", avg_eval_loss, epoch)
@@ -251,9 +243,7 @@ def train(
 @click.command()
 @click.option("--data", default="data")
 @click.option("--monte_carlo_dropout", default=False)
-@click.option(
-    "--state_dict", default="pretrained_models/Graphormer_checkpoint-1_15-04-24.pt"
-)
+@click.option("--state_dict", default="pretrained_models/Graphormer_checkpoint-1_15-04-24.pt")
 @click.option("--random_state", default=42)
 @click.option("--batch_size", default=4)
 @click.option("--torch_device", default="cuda")
