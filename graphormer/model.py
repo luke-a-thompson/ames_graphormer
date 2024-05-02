@@ -110,9 +110,6 @@ class Graphormer(nn.Module):
         end = offset
         new_ptr = []
         for start, end in subgraph_idxs:
-            if start == end:
-                continue
-
             start = start + offset
             end = end + offset
             x = torch.cat((x[:start], vnode, x[start:end], x[end:]))
@@ -137,4 +134,4 @@ class Graphormer(nn.Module):
         vnode_outputs = x[data.ptr[:-1]]
         out = self.out_lin(vnode_outputs)
 
-        return out
+        return out.squeeze()

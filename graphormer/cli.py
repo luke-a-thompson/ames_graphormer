@@ -5,7 +5,7 @@ import torch
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import train_test_split
 from tensorboardX import SummaryWriter
-from torch import nn
+from torch import isnan, nn
 from torch.optim.lr_scheduler import PolynomialLR, ReduceLROnPlateau
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
@@ -168,7 +168,7 @@ def train(
             y = batch.y.to(device)
             optimizer.zero_grad()
             output = model(batch)
-            loss = loss_function(output, y[: output.shape[0]].unsqueeze(1))
+            loss = loss_function(output, y)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm, error_if_nonfinite=True)
             optimizer.step()
@@ -199,7 +199,7 @@ def train(
             y = batch.y.to(device)
             with torch.no_grad():
                 output = model(batch)
-                loss = loss_function(output, y.unsqueeze(1))
+                loss = loss_function(output, y)
             batch_loss: float = loss.item()
             writer.add_scalar("eval/batch_loss", batch_loss, eval_batch_num)
             total_eval_loss += batch_loss

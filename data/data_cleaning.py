@@ -1,8 +1,9 @@
 from pathlib import Path
+
 import pandas as pd
+import torch
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.utils import from_smiles
-import torch
 
 
 def clean_hansen(hansen_dataset: Path | pd.DataFrame) -> pd.DataFrame:
@@ -53,8 +54,12 @@ class HonmaDataset(InMemoryDataset):
         data_list = []
 
         for smiles, ames in zip(honma["smiles"], honma["ames"]):
+            label = torch.tensor([ames], dtype=torch.float)
+            if torch.isnan(label):
+                print(f"WARN: Entry {smiles} has no label, skipping")
+                continue
             data = from_smiles(smiles)
-            data.y = torch.tensor([ames], dtype=torch.float)
+            data.y = label
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
