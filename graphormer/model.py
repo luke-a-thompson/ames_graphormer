@@ -1,8 +1,7 @@
 import torch
 from torch import nn
-from torch_geometric.data import Data
+from torch_geometric.loader.dense_data_loader import Data
 
-from graphormer.functional import shortest_path_distance
 from graphormer.layers import CentralityEncoding, EdgeEncoding, GraphormerEncoderLayer, SpatialEncoding
 
 
@@ -83,28 +82,30 @@ class Graphormer(nn.Module):
             if m.bias is not None:
                 m.bias.data.fill_(0.01)
 
-    def forward(self, data: Data) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        ptr: torch.Tensor,
+        node_paths: torch.Tensor,
+        edge_paths: torch.Tensor,
+    ) -> torch.Tensor:
         """
-        :param data: input graph of batch of graphs
+        :param x: A list of nodes and their corresponding input features
+        :param edge_index: Two lists of nodes, where pair of matching indices represents an edge
+        :param edge_attr: A list of all the edges in the batch and their corresponding features
+        :param ptr: A set of half-open ranges, where each range indicates the specific index of the starting node of the graph in the batch
+        :param node_paths: The paths from each node in the subgraph to every other node in the subgraph as defined by the node indices.
+        :param edge_paths: The paths from each node in the subgraph to every other node in the subgraph as defined by the edge indices.
         :return: torch.Tensor, output node embeddings
         """
-        # A list of nodes and their corresponding input features
-        assert data.x is not None
-        # Two lists of nodes, where pair of matching indices represents an edge
-        assert data.edge_index is not None
-        # A list of all the edges in the batch and their corresponding features
-        assert data.edge_attr is not None
-        # A set of half-open ranges, where each range indicates the specific index of the
-        # starting node of the graph in the batch
-        assert data.ptr is not None
-        device = next(self.parameters()).device
 
-        x = data.x.float()
+        x = x.float()
 
-        edge_index = data.edge_index.long()
-        edge_attr = data.edge_attr.float()
-        node_paths, edge_paths = shortest_path_distance(data)
-        subgraph_idxs = [data.ptr[i : i + 2].tolist() for i in range(data.ptr.shape[0] - 1)]
+        edge_index = edge_index.long()
+        edge_attr = edge_attr.float()
+        subgraph_idxs = [ptr[i : i + 2].tolist() for i in range(ptr.shape[0] - 1)]
         vnode = torch.full_like(x[0], -1).unsqueeze(0)
         offset = 0
         end = offset
@@ -117,10 +118,8 @@ class Graphormer(nn.Module):
             new_ptr.append(start)
 
         new_ptr.append(end + 1)
-        data.ptr = torch.Tensor(new_ptr).int()
+        ptr = torch.Tensor(new_ptr).int()
 
-        node_paths = node_paths.to(device)
-        edge_paths = edge_paths.to(device)
         x = self.node_embedding(x)
         x = self.centrality_encoding(x, edge_index)
         spatial_encoding = self.spatial_encoding(x, node_paths)
@@ -128,10 +127,10 @@ class Graphormer(nn.Module):
         edge_encoding = self.edge_encoding(x, edge_embedding, edge_paths)
 
         for layer in self.layers:
-            x = layer(x, spatial_encoding, edge_encoding, data.ptr)
+            x = layer(x, spatial_encoding, edge_encoding, ptr)
 
         # Output for each VNODE for each graph
-        vnode_outputs = x[data.ptr[:-1]]
+        vnode_outputs = x[ptr[:-1]]
         out = self.out_lin(vnode_outputs)
 
         return out.squeeze()

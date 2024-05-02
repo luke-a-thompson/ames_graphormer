@@ -1,11 +1,15 @@
+import random
+import tomllib
 from enum import Enum
+from typing import Optional
 
 import click
+import pynvml.smi as nvidia_smi
 import torch
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import train_test_split
 from tensorboardX import SummaryWriter
-from torch import isnan, nn
+from torch import nn
 from torch.optim.lr_scheduler import PolynomialLR, ReduceLROnPlateau
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
@@ -23,7 +27,22 @@ class Scheduler(Enum):
     PLATEAU = "plateau"
 
 
+def configure(ctx, param, filename):
+    with open(filename, "rb") as f:
+        config = tomllib.load(f)
+    ctx.default_map = config
+
+
 @click.command()
+@click.option(
+    "-c",
+    "--config",
+    type=click.Path(dir_okay=False),
+    is_eager=True,
+    expose_value=False,
+    help="Read option values from the specified config file",
+    callback=configure,
+)
 @click.option("--data", default="data")
 @click.option("--num_layers", default=3)
 @click.option("--hidden_dim", default=128)
@@ -34,7 +53,7 @@ class Scheduler(Enum):
 @click.option("--max_out_degree", default=5)
 @click.option("--max_path_distance", default=5)
 @click.option("--test_size", default=0.8)
-@click.option("--random_state", default=42)
+@click.option("--random_state", default=None, type=click.INT)
 @click.option("--batch_size", default=16)
 @click.option("--lr", default=3e-4)
 @click.option("--b1", default=0.9)
@@ -59,6 +78,7 @@ class Scheduler(Enum):
 @click.option("--lr_window", default=10)
 @click.option("--lr_reset", default=0)
 @click.option("--lr_factor", default=0.5)
+@click.option("--name", default=None)
 def train(
     data: str,
     num_layers: int,
@@ -70,7 +90,7 @@ def train(
     max_out_degree: int,
     max_path_distance: int,
     test_size: float,
-    random_state: int,
+    random_state: Optional[int],
     batch_size: int,
     lr: float,
     b1: float,
@@ -91,10 +111,18 @@ def train(
     lr_window: int,
     lr_reset: int,
     lr_factor: float,
+    name: Optional[str],
 ):
+    if random_state is None:
+        random_state = int(random.random() * 100000000)
+
     model_parameters = locals().copy()
-    writer = SummaryWriter(flush_secs=10)
-    writer.add_hparams(model_parameters, {})
+    logdir = None
+    if name is not None:
+        logdir = f"runs/{name}"
+    writer = SummaryWriter(logdir, flush_secs=10)
+    nvidia_smi.nvmlInit()
+    handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
 
     torch.manual_seed(random_state)
     device = torch.device(torch_device)
@@ -166,8 +194,19 @@ def train(
         for batch in train_loader:
             batch.to(device)
             y = batch.y.to(device)
+            if train_batch_num == 0:
+                writer.add_graph(
+                    model, [batch.x, batch.edge_index, batch.edge_attr, batch.ptr, batch.node_paths, batch.edge_paths]
+                )
             optimizer.zero_grad()
-            output = model(batch)
+            output = model(
+                batch.x,
+                batch.edge_index,
+                batch.edge_attr,
+                batch.ptr,
+                batch.node_paths,
+                batch.edge_paths,
+            )
             loss = loss_function(output, y)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm, error_if_nonfinite=True)
@@ -179,8 +218,12 @@ def train(
 
             avg_loss = total_train_loss / (progress_bar.n + 1)
             writer.add_scalar("train/avg_loss", avg_loss, train_batch_num)
+
             progress_bar.set_postfix_str(f"Avg Loss: {avg_loss:.4f}")
             progress_bar.update()  # Increment the progress bar
+            res = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
+            writer.add_scalar("nv/gpu", res.gpu, train_batch_num)
+            writer.add_scalar("nv/gpu_mem", res.memory, train_batch_num)
             train_batch_num += 1
         if isinstance(scheduler, PolynomialLR):
             scheduler.step()
@@ -198,7 +241,14 @@ def train(
             batch.to(device)
             y = batch.y.to(device)
             with torch.no_grad():
-                output = model(batch)
+                output = model(
+                    batch.x,
+                    batch.edge_index,
+                    batch.edge_attr,
+                    batch.ptr,
+                    batch.node_paths,
+                    batch.edge_paths,
+                )
                 loss = loss_function(output, y)
             batch_loss: float = loss.item()
             writer.add_scalar("eval/batch_loss", batch_loss, eval_batch_num)

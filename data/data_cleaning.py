@@ -5,6 +5,8 @@ import torch
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.utils import from_smiles
 
+from graphormer.functional import shortest_path_distance
+
 
 def clean_hansen(hansen_dataset: Path | pd.DataFrame) -> pd.DataFrame:
     """
@@ -60,6 +62,9 @@ class HonmaDataset(InMemoryDataset):
                 continue
             data = from_smiles(smiles)
             data.y = label
+            node_paths, edge_paths = shortest_path_distance(data.edge_index)
+            data.node_paths = node_paths
+            data.edge_paths = edge_paths
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
