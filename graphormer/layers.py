@@ -173,38 +173,34 @@ class GraphormerMultiHeadAttention(nn.Module):
         x: torch.Tensor,
         spatial_encoding: torch.Tensor,
         edge_encoding: torch.Tensor,
-        ptr: torch.Tensor,
     ) -> torch.Tensor:
         """
-        :param x: node embedding, shape: (num_nodes, hidden_dim)
-        :param spatial_encoding: spatial encoding matrix, shape (num_node_pairs)
-        :param edge_encoding: edge encoding matrix, shape (num_node_pairs)
+        :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim)
+        :param spatial_encoding: spatial encoding matrix, shape (batch_size, num_node_pairs)
+        :param edge_encoding: edge encoding matrix, shape (batch_size, num_node_pairs)
         :return: torch.Tensor, node embeddings after all attention heads
         """
-        subgraph_idxs = [ptr[i : i + 2].tolist() for i in range(ptr.shape[0] - 1)]
+        batch_size = x.shape[0]
+        max_subgraph_size = x.shape[1]
+        hidden_dim = x.shape[2]
+        bias = spatial_encoding.view(batch_size, max_subgraph_size, max_subgraph_size) + edge_encoding.view(
+            batch_size, max_subgraph_size, max_subgraph_size
+        )
+        bias = bias.unsqueeze(1)
 
-        attn_list = []
-        for idx_range in subgraph_idxs:
-
-            start_index = len(attn_list)
-            num_nodes = idx_range[1] - idx_range[0]
-            x_subgraph = x[idx_range[0] : idx_range[1]]
-            q_x = self.linear_q(x_subgraph).view(self.num_heads, x_subgraph.shape[0], self.head_size)
-            k_x = self.linear_k(x_subgraph).view(self.num_heads, x_subgraph.shape[0], self.head_size)
-            v_x = self.linear_v(x_subgraph).view(self.num_heads, x_subgraph.shape[0], self.head_size)
-            spatial_subgraph = spatial_encoding[start_index : start_index + num_nodes**2]
-            edge_subgraph = edge_encoding[start_index : start_index + num_nodes**2]
-
-            k_x_t = k_x.transpose(1, 2)
-            a = (q_x @ k_x_t) * self.scale
-            a += spatial_subgraph.view(a.shape[1], a.shape[1]) + edge_subgraph.view(a.shape[1], a.shape[1])
-            a = torch.softmax(a, dim=-1)
-            a @= v_x
-            a = self.att_dropout(a)
-            attn_list.append(a.transpose(0, 1).flatten(1, 2))
-
-        attn = torch.cat(attn_list)
-
+        q_x = self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).permute(0, 2, 1, 3)
+        k_x = self.linear_k(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).permute(0, 2, 1, 3)
+        v_x = self.linear_v(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).permute(0, 2, 1, 3)
+        k_x_t = k_x.transpose(-2, -1)
+        a = (q_x @ k_x_t) * self.scale
+        a += bias
+        pad_mask = torch.any(a != 0, dim=-1)
+        a[~pad_mask] = float("-inf")
+        a = torch.softmax(a, dim=-1)
+        a = torch.nan_to_num(a)
+        a @= v_x
+        a = self.att_dropout(a)
+        attn = a.reshape(batch_size, max_subgraph_size, hidden_dim)
         return self.linear_out(attn)
 
 
@@ -235,7 +231,6 @@ class GraphormerEncoderLayer(nn.Module):
         x: torch.Tensor,
         spatial_encoding: torch.Tensor,
         edge_encoding: torch.Tensor,
-        ptr: torch.Tensor,
     ) -> torch.Tensor:
         """
         Implements forward pass of the Graphormer encoder layer.
@@ -256,9 +251,11 @@ class GraphormerEncoderLayer(nn.Module):
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
         att_input = self.att_norm(x)
-        att_output = self.attention(att_input, spatial_encoding, edge_encoding, ptr) + x
+        att_output = self.attention(att_input, spatial_encoding, edge_encoding) + x
+        pad_mask = torch.any(att_output == 0, dim=-1)
 
         ffn_input = self.ffn_norm(att_output)
         ffn_output = self.ffn(ffn_input) + att_output
+        ffn_output[pad_mask] = 0
 
         return ffn_output

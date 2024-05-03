@@ -1,6 +1,6 @@
 import torch
+import torch.nn.utils.rnn as rnn
 from torch import nn
-from torch_geometric.loader.dense_data_loader import Data
 
 from graphormer.layers import CentralityEncoding, EdgeEncoding, GraphormerEncoderLayer, SpatialEncoding
 
@@ -105,20 +105,25 @@ class Graphormer(nn.Module):
 
         edge_index = edge_index.long()
         edge_attr = edge_attr.float()
-        subgraph_idxs = [ptr[i : i + 2].tolist() for i in range(ptr.shape[0] - 1)]
+        subgraph_idxs = torch.stack([ptr[:-1], ptr[1:]], dim=1)
+        # Create VNODE
         vnode = torch.full_like(x[0], -1).unsqueeze(0)
-        offset = 0
-        end = offset
-        new_ptr = []
-        for start, end in subgraph_idxs:
-            start = start + offset
-            end = end + offset
-            x = torch.cat((x[:start], vnode, x[start:end], x[end:]))
-            offset += 1
-            new_ptr.append(start)
 
-        new_ptr.append(end + 1)
-        ptr = torch.Tensor(new_ptr).int()
+        # Prepare expanded list to accommodate new vnodes
+        num_insertions = subgraph_idxs.size(0)
+        new_size = x.size(0) + num_insertions
+        original_indices = torch.ones(new_size, dtype=torch.bool)
+        original_indices[subgraph_idxs[:, 0] + torch.arange(num_insertions).to(x.device)] = 0
+        expanded_x = torch.zeros((new_size, x.size(1)), dtype=x.dtype).to(x.device)
+
+        expanded_x[original_indices] = x
+        expanded_x[~original_indices] = vnode
+        x = expanded_x
+
+        # Adjust ptrs
+        new_ptr = subgraph_idxs[:, 0] + torch.arange(num_insertions).to(x.device)
+        new_ptr = torch.cat([new_ptr, torch.tensor([new_size]).to(x.device)])
+        ptr = new_ptr.int().to(x.device)
 
         x = self.node_embedding(x)
         x = self.centrality_encoding(x, edge_index)
@@ -126,9 +131,33 @@ class Graphormer(nn.Module):
         edge_embedding = self.edge_embedding(edge_attr)
         edge_encoding = self.edge_encoding(x, edge_embedding, edge_paths)
 
-        for layer in self.layers:
-            x = layer(x, spatial_encoding, edge_encoding, ptr)
+        # Pad graphs to max graph size
+        subgraph_idxs = torch.stack([ptr[:-1], ptr[1:]], dim=1)
+        subgraph_sq_ptr = torch.cat(
+            [torch.tensor([0]).to(x.device), ((subgraph_idxs[:, 1] - subgraph_idxs[:, 0]) ** 2).cumsum(dim=0)]
+        )
+        subgraph_sq_idxs = torch.stack([subgraph_sq_ptr[:-1], subgraph_sq_ptr[1:]], dim=1)
 
+        subgraphs = []
+        spatial_subgraphs = []
+        edge_subgraphs = []
+        for idx_range, idx_sq_range in zip(subgraph_idxs.tolist(), subgraph_sq_idxs.tolist()):
+            subgraph = x[idx_range[0] : idx_range[1]]
+            subgraphs.append(subgraph)
+            spatial_subgraph = spatial_encoding[idx_sq_range[0] : idx_sq_range[1]]
+            spatial_subgraphs.append(spatial_subgraph)
+            edge_subgraph = edge_encoding[idx_sq_range[0] : idx_sq_range[1]]
+            edge_subgraphs.append(edge_subgraph)
+
+        x = rnn.pad_sequence(subgraphs, batch_first=True)
+        padded_spatial_subgraphs = rnn.pad_sequence(spatial_subgraphs, batch_first=True)
+        padded_edge_subgraphs = rnn.pad_sequence(edge_subgraphs, batch_first=True)
+        padded_mask = torch.all(x == 0, dim=-1)
+
+        for layer in self.layers:
+            x = layer(x, padded_spatial_subgraphs, padded_edge_subgraphs)
+
+        x = x.flatten(0, 1)[~padded_mask.flatten()]
         # Output for each VNODE for each graph
         vnode_outputs = x[ptr[:-1]]
         out = self.out_lin(vnode_outputs)
