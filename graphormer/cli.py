@@ -6,7 +6,7 @@ from typing import Optional
 import click
 import pynvml.smi as nvidia_smi
 import torch
-from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import train_test_split
 from tensorboardX import SummaryWriter
 from torch import nn
@@ -174,7 +174,14 @@ def train(
 
     assert scheduler is not None
 
-    loss_function = nn.BCEWithLogitsLoss(reduction="sum")
+    num_neg_samples = 0
+    num_pos_samples = 0
+    for sample in train_loader:
+        num_pos_samples += torch.sum(sample.y).item()
+        num_neg_samples += torch.sum(sample.y == 0).item()
+    pos_weight = torch.tensor([num_neg_samples / num_pos_samples]).to(device)
+
+    loss_function = nn.BCEWithLogitsLoss(reduction="sum", pos_weight=pos_weight)
     model.to(device)
 
     progress_bar = tqdm(total=0, desc="Initializing...", unit="batch")
@@ -254,7 +261,7 @@ def train(
             writer.add_scalar("eval/batch_loss", batch_loss, eval_batch_num)
             total_eval_loss += batch_loss
 
-            eval_preds = [int(p > 0.5) for p in torch.sigmoid(output.detach().cpu()).numpy()]
+            eval_preds = torch.round(torch.sigmoid(output)).tolist()
             eval_labels = y.cpu().numpy()
             if sum(eval_labels) > 0:
                 batch_bac = balanced_accuracy_score(eval_labels, eval_preds)
@@ -272,14 +279,16 @@ def train(
         avg_eval_loss = total_eval_loss / len(test_loader)
         progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
         bac = balanced_accuracy_score(all_eval_labels, all_eval_preds)
+        ac = accuracy_score(all_eval_labels, all_eval_preds)
         bac_adj = balanced_accuracy_score(all_eval_labels, all_eval_preds, adjusted=True)
+        writer.add_scalar("eval/acc", ac, epoch)
         writer.add_scalar("eval/bac", bac, epoch)
         writer.add_scalar("eval/bac_adj", bac_adj, epoch)
         writer.add_scalar("eval/avg_eval_loss", avg_eval_loss, epoch)
 
         print(
             f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
-                avg_eval_loss:.4f} | Eval BAC: {bac:.4f}"
+                avg_eval_loss:.4f} | Eval BAC: {bac:.4f} | Eval ACC: {ac:.4f}"
         )
 
         if epoch % 20 == 0 and epoch != 0:
