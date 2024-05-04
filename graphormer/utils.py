@@ -2,7 +2,7 @@ from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
-from sklearn.metrics import balanced_accuracy_score, roc_auc_score
+from torch.nn.modules.loss import _Loss
 
 
 def decrease_to_max_value(x, max_value):
@@ -22,7 +22,8 @@ def difference_idxs(a, b, epsilon=1e-6) -> torch.Tensor:
     for idx in indices:
         idx_tuple = tuple(idx.tolist())
         print(
-            f"Index: {idx_tuple}, Tensor1 Value: {a[idx_tuple]}, Tensor2 Value: {b[idx_tuple]}, Diff: {a[idx_tuple] - b[idx_tuple]}"
+            f"Index: {idx_tuple}, Tensor1 Value: {a[idx_tuple]}, Tensor2 Value: {
+                b[idx_tuple]}, Diff: {a[idx_tuple] - b[idx_tuple]}"
         )
     return indices
 
@@ -31,10 +32,12 @@ def save_model_weights(
     model: torch.nn.Module,
     hyperparameters: Dict[str, int | float],
     optimizer: torch.optim.Optimizer,
-    epochs: int,
+    epoch: int,
+    loss: _Loss,
+    random_state: int,
     lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
     last_train_loss: Optional[float] = None,
-    model_name: str = "Graphormer",
+    model_name: Optional[str] = None,
 ) -> None:
     """
     Save the model weights, optimizer state, and other necessary information to a checkpoint file.
@@ -43,6 +46,7 @@ def save_model_weights(
         model (torch.nn.Module): The model whose weights need to be saved.
         epoch (int): The current epoch index.
         optimizer (torch.optim.Optimizer): The optimizer used for training the model.
+        loss (torch.nn.modules.loss._Loss): The loss function used for training the model
         lr_scheduler (torch.optim.lr_scheduler.LRScheduler, optional): The learning rate scheduler used during training. Defaults to None.
         last_train_loss (float, optional): The last recorded training loss. Defaults to None.
         model_name (str, optional): The name of the model. Defaults to "Graphormer".
@@ -60,17 +64,20 @@ def save_model_weights(
 
     c_date = datetime.now().strftime("%d-%m-%y")
 
-    name: str = f"{folder_save_path}/{model_name}_checkpoint-{epochs}_{c_date}.pt"
+    if model_name is None:
+        name = f"{folder_save_path}/Graphormer_checkpoint-{epoch}_{c_date}.pt"
+    else:
+        name = f"{folder_save_path}/{model_name}.pt"
 
     checkpoint = {
         "state_dict": model.state_dict(),
         "hyperparameters": hyperparameters,
-        "epoch": epochs,  # Assuming epoch indexing starts at 0
+        "epoch": epoch,
         "optimizer_state_dict": optimizer.state_dict(),
-        "scheduler_state_dict": [
-            None if lr_scheduler is None else lr_scheduler.state_dict()
-        ],  # If using a learning rate scheduler
-        "loss": last_train_loss,  # Save the last loss value
+        "scheduler_state_dict": None if lr_scheduler is None else lr_scheduler.state_dict(),
+        "last_train_loss": last_train_loss,
+        "loss_state_dict": loss.state_dict(),
+        "random_state": random_state,
     }
 
     try:
@@ -80,9 +87,7 @@ def save_model_weights(
         print(f"Failed to save {name}. Error: {e}")
 
 
-def model_init_print(
-    model_parameters: Dict[str, int | float], model=None, input_size=None
-) -> Dict[str, int | float]:
+def model_init_print(model_parameters: Dict[str, int | float], model=None, input_size=None) -> Dict[str, int | float]:
     from torchinfo import summary
 
     if model and input_size:
@@ -94,9 +99,7 @@ def model_init_print(
     return model_parameters
 
 
-def save_model_parameters(
-    model_parameters: dict[str, int | float]
-) -> dict[str, int | float]:
+def save_model_parameters(model_parameters: dict[str, int | float]) -> dict[str, int | float]:
     """
     Cleans the specified model parameters by removing any keys that are not in the keep_keys list.
 

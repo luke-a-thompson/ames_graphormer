@@ -60,8 +60,8 @@ fn shortest_paths(
 
     let mut paths = vec![
         Paths {
-            node_paths: vec![[-1; 12]; num_nodes],
-            edge_paths: vec![[-1; 12]; num_nodes],
+            node_paths: vec![[-1; 64]; num_nodes],
+            edge_paths: vec![[-1; 64]; num_nodes],
         };
         num_nodes
     ];
