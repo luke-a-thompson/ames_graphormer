@@ -1,31 +1,9 @@
-from pathlib import Path
-
 import pandas as pd
 import torch
-from torch_geometric.data import Data, InMemoryDataset
+from torch_geometric.data import InMemoryDataset
 from torch_geometric.utils import from_smiles
 
 from graphormer.functional import shortest_path_distance
-
-
-def clean_hansen(hansen_dataset: Path | pd.DataFrame) -> pd.DataFrame:
-    """
-    Cleans the Hansen dataset by removing unnecessary columns and renaming the remaining columns.
-
-    Parameters:
-    - hansen_dataset: Path or pd.DataFrame
-        The path to the Hansen dataset CSV file or a DataFrame containing the dataset.
-
-    Returns:
-    - pd.DataFrame
-        The cleaned Hansen dataset with columns 'smiles' and 'ames'.
-    """
-    hansen = pd.read_csv(hansen_dataset)
-
-    hansen = hansen.drop(hansen.columns[1], axis=1)
-    hansen.columns = ["smiles", "ames"]
-
-    return hansen
 
 
 class HonmaDataset(InMemoryDataset):
@@ -77,7 +55,7 @@ class HansenDataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        return ["Hansen_Ames.csv"]
+        return ["Hansen_New.csv"]
 
     @property
     def processed_file_names(self):
@@ -93,13 +71,20 @@ class HansenDataset(InMemoryDataset):
         Returns:
             None
         """
-        honma = clean_hansen(self.raw_paths[0])  # Clean the raw_file_names, idx[0]
+        honma = pd.read_csv(self.raw_paths[0])
 
         data_list = []
 
         for smiles, ames in zip(honma["smiles"], honma["ames"]):
+            label = torch.tensor([ames], dtype=torch.float)
+            if torch.isnan(label):
+                print(f"WARN: Entry {smiles} has no label, skipping")
+                continue
             data = from_smiles(smiles)
-            data.y = torch.tensor([ames], dtype=torch.float)
+            data.y = label
+            node_paths, edge_paths = shortest_path_distance(data.edge_index)
+            data.node_paths = node_paths
+            data.edge_paths = edge_paths
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])

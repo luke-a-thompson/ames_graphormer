@@ -18,7 +18,6 @@ from torch_geometric.data import InMemoryDataset
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-from data.data_cleaning import HonmaDataset
 from graphormer.model import Graphormer
 from graphormer.schedulers import GreedyLR
 from graphormer.utils import model_init_print, save_model_weights
@@ -48,6 +47,7 @@ def configure(ctx, param, filename):
     default = "default_hparams.toml"
 )
 @click.option("--data", default="data")
+@click.option("--dataset", default="Honma")
 @click.option("--num_layers", default=3)
 @click.option("--hidden_dim", default=128)
 @click.option("--edge_embedding_dim", default=128)
@@ -84,8 +84,10 @@ def configure(ctx, param, filename):
 @click.option("--lr_factor", default=0.5)
 @click.option("--name", default=None)
 @click.option("--checkpt_save_interval", default=5)
+@click.option("--accumulation_steps", default=1)
 def train(
     data: str,
+    dataset: InMemoryDataset,
     num_layers: int,
     hidden_dim: int,
     edge_embedding_dim: int,
@@ -118,6 +120,7 @@ def train(
     lr_factor: float,
     name: Optional[str],
     checkpt_save_interval: int,
+    accumulation_steps: int,
 ):
     if random_state is None:
         random_state = int(random.random() * 100000000)
@@ -127,8 +130,8 @@ def train(
         "lr_power": lr_power,
         "lr_patience": lr_patience,
         "lr_cooldown": lr_cooldown,
-        "lr_min": lr_min,
-        "lr_max": lr_max,
+        "lr_min": lr_min / accumulation_steps,
+        "lr_max": lr_max / accumulation_steps,
         "lr_warmup": lr_warmup,
         "lr_smooth": lr_smooth,
         "lr_window": lr_window,
@@ -137,7 +140,7 @@ def train(
     }
 
     optimizer_params = {
-        "lr": lr,
+        "lr": lr / accumulation_steps,
         "betas": (b1, b2),
         "weight_decay": weight_decay,
         "eps": eps,
@@ -151,7 +154,15 @@ def train(
 
     torch.manual_seed(random_state)
     device = torch.device(torch_device)
-    dataset = HonmaDataset(data)
+
+    if dataset == "Honma":
+        from data.data_cleaning import HonmaDataset
+        dataset = HonmaDataset(data)
+    elif dataset == "Hansen":
+        from data.data_cleaning import HansenDataset
+        dataset = HansenDataset(data)
+    else:
+        raise ValueError(f"Unknown dataset {data}")
 
     start_epoch = 0
     train_loader = None
@@ -221,15 +232,16 @@ def train(
         model.train()
         avg_loss = 0.0
         train_batch_num = 0 + epoch * train_batches_per_epoch
-        for batch in train_loader:
+        for batch_idx, batch in enumerate(train_loader):
             batch.to(device)
             y = batch.y.to(device)
+
             if train_batch_num == 0:
                 writer.add_graph(
                     model, [batch.x, batch.edge_index, batch.edge_attr,
                             batch.ptr, batch.node_paths, batch.edge_paths]
                 )
-            optimizer.zero_grad()
+
             output = model(
                 batch.x,
                 batch.edge_index,
@@ -238,11 +250,18 @@ def train(
                 batch.node_paths,
                 batch.edge_paths,
             )
+
             loss = loss_function(output, y)
             loss.backward()
+
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(), clip_grad_norm, error_if_nonfinite=True)
-            optimizer.step()
+
+            if batch_idx % accumulation_steps == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+                writer.add_scalar("train/loss", loss.item(), train_batch_num)
+
             batch_loss = loss.item()
             writer.add_scalar("train/batch_loss", batch_loss, train_batch_num)
             writer.add_scalar("train/sample_loss", batch_loss /
