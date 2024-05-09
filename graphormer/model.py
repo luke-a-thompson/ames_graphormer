@@ -133,6 +133,7 @@ class Graphormer(nn.Module):
 
         # Pad graphs to max graph size
         subgraph_idxs = torch.stack([ptr[:-1], ptr[1:]], dim=1)
+        max_size = int(torch.max(subgraph_idxs[:, 1] - subgraph_idxs[:, 0]).item())
         subgraph_sq_ptr = torch.cat(
             [torch.tensor([0]).to(x.device), ((subgraph_idxs[:, 1] - subgraph_idxs[:, 0]) ** 2).cumsum(dim=0)]
         )
@@ -142,16 +143,21 @@ class Graphormer(nn.Module):
         spatial_subgraphs = []
         edge_subgraphs = []
         for idx_range, idx_sq_range in zip(subgraph_idxs.tolist(), subgraph_sq_idxs.tolist()):
+            subgraph_size = idx_range[1] - idx_range[0]
             subgraph = x[idx_range[0] : idx_range[1]]
             subgraphs.append(subgraph)
-            spatial_subgraph = spatial_encoding[idx_sq_range[0] : idx_sq_range[1]]
-            spatial_subgraphs.append(spatial_subgraph)
-            edge_subgraph = edge_encoding[idx_sq_range[0] : idx_sq_range[1]]
-            edge_subgraphs.append(edge_subgraph)
+
+            spatial_subgraph = torch.zeros((max_size, max_size))
+            spatial_subgraph[:subgraph_size, :subgraph_size] = spatial_encoding[idx_sq_range[0] : idx_sq_range[1]].reshape(subgraph_size, subgraph_size)
+            spatial_subgraphs.append(spatial_subgraph.unsqueeze(0))
+
+            edge_subgraph = torch.zeros((max_size, max_size))
+            edge_subgraph[:subgraph_size, :subgraph_size] = edge_encoding[idx_sq_range[0] : idx_sq_range[1]].reshape(subgraph_size, subgraph_size)
+            edge_subgraphs.append(edge_subgraph.unsqueeze(0))
 
         x = rnn.pad_sequence(subgraphs, batch_first=True)
-        padded_spatial_subgraphs = rnn.pad_sequence(spatial_subgraphs, batch_first=True)
-        padded_edge_subgraphs = rnn.pad_sequence(edge_subgraphs, batch_first=True)
+        padded_spatial_subgraphs = torch.cat(spatial_subgraphs).to(x.device)
+        padded_edge_subgraphs = torch.cat(edge_subgraphs).to(x.device)
         padded_mask = torch.all(x == 0, dim=-1)
 
         for layer in self.layers:

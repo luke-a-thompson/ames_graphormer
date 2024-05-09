@@ -176,17 +176,14 @@ class GraphormerMultiHeadAttention(nn.Module):
     ) -> torch.Tensor:
         """
         :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim)
-        :param spatial_encoding: spatial encoding matrix, shape (batch_size, num_node_pairs)
-        :param edge_encoding: edge encoding matrix, shape (batch_size, num_node_pairs)
+        :param spatial_encoding: spatial encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
+        :param edge_encoding: edge encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
         :return: torch.Tensor, node embeddings after all attention heads
         """
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
         hidden_dim = x.shape[2]
-        bias = spatial_encoding.view(batch_size, max_subgraph_size, max_subgraph_size) + edge_encoding.view(
-            batch_size, max_subgraph_size, max_subgraph_size
-        )
-        bias = bias.unsqueeze(1)
+        bias = (spatial_encoding + edge_encoding).unsqueeze(1)
 
         q_x = self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).permute(0, 2, 1, 3)
         k_x = self.linear_k(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).permute(0, 2, 1, 3)

@@ -87,7 +87,7 @@ def configure(ctx, param, filename):
 @click.option("--accumulation_steps", default=1)
 def train(
     data: str,
-    ames_dataset: InMemoryDataset,
+    ames_dataset: str,
     num_layers: int,
     hidden_dim: int,
     edge_embedding_dim: int,
@@ -260,7 +260,6 @@ def train(
             if batch_idx % accumulation_steps == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-                writer.add_scalar("train/loss", loss.item(), train_batch_num)
 
             batch_loss = loss.item()
             writer.add_scalar("train/batch_loss", batch_loss, train_batch_num)
@@ -276,7 +275,7 @@ def train(
             train_batch_num += 1
         if isinstance(scheduler, PolynomialLR):
             scheduler.step()
-        writer.add_scalar("train/lr", scheduler.get_last_lr(), epoch)
+        writer.add_scalar("train/lr", scheduler.get_last_lr() * accumulation_steps, epoch)
 
         # Prepare for the evaluation phase
         progress_bar.reset(total=len(test_loader))
@@ -336,7 +335,7 @@ def train(
         )
 
         assert random_state is not None
-        if epoch % 5 == checkpt_save_interval:
+        if epoch % checkpt_save_interval == 0:
             save_model_weights(
                 model,
                 model_parameters,
