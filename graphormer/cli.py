@@ -47,7 +47,7 @@ def configure(ctx, param, filename):
     default = "default_hparams.toml"
 )
 @click.option("--data", default="data")
-@click.option("--dataset", default="Honma")
+@click.option("--ames_dataset", default="Honma")
 @click.option("--num_layers", default=3)
 @click.option("--hidden_dim", default=128)
 @click.option("--edge_embedding_dim", default=128)
@@ -87,7 +87,7 @@ def configure(ctx, param, filename):
 @click.option("--accumulation_steps", default=1)
 def train(
     data: str,
-    dataset: InMemoryDataset,
+    ames_dataset: InMemoryDataset,
     num_layers: int,
     hidden_dim: int,
     edge_embedding_dim: int,
@@ -155,10 +155,10 @@ def train(
     torch.manual_seed(random_state)
     device = torch.device(torch_device)
 
-    if dataset == "Honma":
+    if ames_dataset == "Honma":
         from data.data_cleaning import HonmaDataset
         dataset = HonmaDataset(data)
-    elif dataset == "Hansen":
+    elif ames_dataset == "Hansen":
         from data.data_cleaning import HansenDataset
         dataset = HansenDataset(data)
     else:
@@ -201,7 +201,7 @@ def train(
         model.to(device)
 
         train_loader, test_loader = create_loaders(
-            dataset, test_size, batch_size, random_state)
+            dataset, test_size, batch_size, random_state, ames_dataset)
         optimizer = torch.optim.AdamW(model.parameters(), **optimizer_params)
         scheduler = get_scheduler(
             scheduler_type, optimizer, epochs, **lr_params)
@@ -400,20 +400,24 @@ def inference(
 
 
 def create_loaders(
-    dataset: InMemoryDataset, test_size: float, batch_size: int, random_state: int
+    dataset: InMemoryDataset, test_size: float, batch_size: int, random_state: int, ames_dataset: str | None = None
 ) -> Tuple[DataLoader, DataLoader]:
-    test_ids, train_ids = train_test_split(
-        [i for i in range(len(dataset))], test_size=test_size, random_state=random_state
-    )
-    train_loader = DataLoader(
-        Subset(dataset, train_ids),  # type: ignore
-        batch_size=batch_size,
-        shuffle=True,
-    )
-    test_loader = DataLoader(
-        Subset(dataset, test_ids),  # type: ignore
-        batch_size=batch_size,
-    )
+    if ames_dataset == "Hansen":
+        train_loader = DataLoader(dataset[:12140], batch_size=batch_size, shuffle=True)
+        test_loader = DataLoader(dataset[12140:], batch_size=batch_size)
+    else:
+        test_ids, train_ids = train_test_split(
+            range(len(dataset)), test_size=test_size, random_state=random_state
+        )
+        train_loader = DataLoader(
+            Subset(dataset, train_ids),  # type: ignore
+            batch_size=batch_size,
+            shuffle=True,
+        )
+        test_loader = DataLoader(
+            Subset(dataset, test_ids),  # type: ignore
+            batch_size=batch_size,
+        )
     return train_loader, test_loader
 
 
