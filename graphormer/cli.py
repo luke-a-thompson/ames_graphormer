@@ -5,7 +5,6 @@ from enum import Enum
 from typing import Dict, Optional, Tuple
 
 import click
-import pynvml.smi as nvidia_smi
 import torch
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import train_test_split
@@ -46,6 +45,7 @@ def configure(ctx, param, filename):
     expose_value=False,
     help="Read option values from the specified config file",
     callback=configure,
+    default = "default_hparams.toml"
 )
 @click.option("--data", default="data")
 @click.option("--num_layers", default=3)
@@ -83,6 +83,7 @@ def configure(ctx, param, filename):
 @click.option("--lr_reset", default=0)
 @click.option("--lr_factor", default=0.5)
 @click.option("--name", default=None)
+@click.option("--checkpt_save_interval", default=5)
 def train(
     data: str,
     num_layers: int,
@@ -116,6 +117,7 @@ def train(
     lr_reset: int,
     lr_factor: float,
     name: Optional[str],
+    checkpt_save_interval: int,
 ):
     if random_state is None:
         random_state = int(random.random() * 100000000)
@@ -146,8 +148,6 @@ def train(
     if name is not None:
         logdir = f"runs/{name}"
     writer = SummaryWriter(logdir, flush_secs=10)
-    nvidia_smi.nvmlInit()
-    handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
 
     torch.manual_seed(random_state)
     device = torch.device(torch_device)
@@ -254,9 +254,6 @@ def train(
 
             progress_bar.set_postfix_str(f"Avg Loss: {avg_loss:.4f}")
             progress_bar.update()  # Increment the progress bar
-            res = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
-            writer.add_scalar("nv/gpu", res.gpu, train_batch_num)
-            writer.add_scalar("nv/gpu_mem", res.memory, train_batch_num)
             train_batch_num += 1
         if isinstance(scheduler, PolynomialLR):
             scheduler.step()
@@ -320,17 +317,18 @@ def train(
         )
 
         assert random_state is not None
-        save_model_weights(
-            model,
-            model_parameters,
-            optimizer,
-            epoch,
-            loss_function,
-            random_state,
-            last_train_loss=avg_loss,
-            lr_scheduler=scheduler,
-            model_name=name,
-        )
+        if epoch % 5 == checkpt_save_interval:
+            save_model_weights(
+                model,
+                model_parameters,
+                optimizer,
+                epoch,
+                loss_function,
+                random_state,
+                last_train_loss=avg_loss,
+                lr_scheduler=scheduler,
+                model_name=name,
+            )
 
     progress_bar.close()
 
