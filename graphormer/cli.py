@@ -275,7 +275,7 @@ def train(
             train_batch_num += 1
         if isinstance(scheduler, PolynomialLR):
             scheduler.step()
-        writer.add_scalar("train/lr", scheduler.get_last_lr() * accumulation_steps, epoch)
+        writer.add_scalar("train/lr", scheduler.get_last_lr()[0] * accumulation_steps, epoch)
 
         # Prepare for the evaluation phase
         progress_bar.reset(total=len(test_loader))
