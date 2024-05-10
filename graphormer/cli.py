@@ -130,8 +130,8 @@ def train(
         "lr_power": lr_power,
         "lr_patience": lr_patience,
         "lr_cooldown": lr_cooldown,
-        "lr_min": lr_min / accumulation_steps,
-        "lr_max": lr_max / accumulation_steps,
+        "lr_min": lr_min,
+        "lr_max": lr_max,
         "lr_warmup": lr_warmup,
         "lr_smooth": lr_smooth,
         "lr_window": lr_window,
@@ -140,7 +140,7 @@ def train(
     }
 
     optimizer_params = {
-        "lr": lr / accumulation_steps,
+        "lr": lr,
         "betas": (b1, b2),
         "weight_decay": weight_decay,
         "eps": eps,
@@ -275,7 +275,7 @@ def train(
             train_batch_num += 1
         if isinstance(scheduler, PolynomialLR):
             scheduler.step()
-        writer.add_scalar("train/lr", scheduler.get_last_lr()[0] * accumulation_steps, epoch)
+        writer.add_scalar("train/lr", scheduler.get_last_lr()[0], epoch)
 
         # Prepare for the evaluation phase
         progress_bar.reset(total=len(test_loader))
