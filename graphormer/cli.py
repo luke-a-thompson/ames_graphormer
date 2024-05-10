@@ -85,6 +85,7 @@ def configure(ctx, param, filename):
 @click.option("--name", default=None)
 @click.option("--checkpt_save_interval", default=5)
 @click.option("--accumulation_steps", default=1)
+@click.option("--loss_reduction", default="mean")
 def train(
     data: str,
     ames_dataset: str,
@@ -121,17 +122,23 @@ def train(
     name: Optional[str],
     checkpt_save_interval: int,
     accumulation_steps: int,
+    loss_reduction: str,
 ):
     if random_state is None:
         random_state = int(random.random() * 100000000)
     assert random_state is not None
 
+    effective_batch_size = accumulation_steps * batch_size
+    effective_lr_min = lr_min / accumulation_steps if loss_reduction == "mean" else lr_min / effective_batch_size
+    effective_lr_max = lr_max / accumulation_steps if loss_reduction == "mean" else lr_max / effective_batch_size
+    effective_lr = lr / accumulation_steps if loss_reduction == "mean" else lr / effective_batch_size
+
     lr_params = {
         "lr_power": lr_power,
         "lr_patience": lr_patience,
         "lr_cooldown": lr_cooldown,
-        "lr_min": lr_min,
-        "lr_max": lr_max,
+        "lr_min": effective_lr_min,
+        "lr_max": effective_lr_max,
         "lr_warmup": lr_warmup,
         "lr_smooth": lr_smooth,
         "lr_window": lr_window,
@@ -140,7 +147,7 @@ def train(
     }
 
     optimizer_params = {
-        "lr": lr,
+        "lr": effective_lr,
         "betas": (b1, b2),
         "weight_decay": weight_decay,
         "eps": eps,
@@ -208,7 +215,7 @@ def train(
 
         pos_weight = calculate_pos_weight(train_loader).to(device)
         loss_function = nn.BCEWithLogitsLoss(
-            reduction="sum", pos_weight=pos_weight)
+            reduction="mean", pos_weight=pos_weight)
 
     assert train_loader is not None
     assert test_loader is not None
@@ -264,7 +271,7 @@ def train(
             batch_loss = loss.item()
             writer.add_scalar("train/batch_loss", batch_loss, train_batch_num)
             writer.add_scalar("train/sample_loss", batch_loss /
-                              output.shape[0], train_batch_num)
+                              output.shape[0] if loss_reduction == "sum" else batch_loss, train_batch_num)
             total_train_loss += batch_loss
 
             avg_loss = total_train_loss / (progress_bar.n + 1)
@@ -275,7 +282,7 @@ def train(
             train_batch_num += 1
         if isinstance(scheduler, PolynomialLR):
             scheduler.step()
-        writer.add_scalar("train/lr", scheduler.get_last_lr()[0], epoch)
+        writer.add_scalar("train/lr", scheduler.get_last_lr()[0] * accumulation_steps if loss_reduction == "mean" else scheduler.get_last_lr()[0] * effective_batch_size, epoch)
 
         # Prepare for the evaluation phase
         progress_bar.reset(total=len(test_loader))
@@ -503,7 +510,7 @@ def load_from_checkpoint(
 
     pos_weight = calculate_pos_weight(train_loader).to(device)
     loss_function = nn.BCEWithLogitsLoss(
-        reduction="sum", pos_weight=pos_weight)
+        reduction="mean", pos_weight=pos_weight)
     loss_function.load_state_dict(checkpoint["loss_state_dict"])
 
     print(f"Successfully loaded model {name} at epoch {start_epoch}")
