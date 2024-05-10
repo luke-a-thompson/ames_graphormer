@@ -7,7 +7,8 @@ from graphormer.functional import shortest_path_distance
 
 
 class HonmaDataset(InMemoryDataset):
-    def __init__(self, root, transform=None, pre_transform=None):
+    def __init__(self, root, transform=None, pre_transform=None, max_distance: int = 5):
+        self.max_distance = max_distance
         super().__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -40,7 +41,7 @@ class HonmaDataset(InMemoryDataset):
                 continue
             data = from_smiles(smiles)
             data.y = label
-            node_paths, edge_paths = shortest_path_distance(data.edge_index)
+            node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
             data.node_paths = node_paths
             data.edge_paths = edge_paths
             data_list.append(data)
@@ -49,7 +50,7 @@ class HonmaDataset(InMemoryDataset):
 
 
 class HansenDataset(InMemoryDataset):
-    def __init__(self, root, transform=None, pre_transform=None):
+    def __init__(self, root, transform=None, pre_transform=None, max_distance: int = 5):
         super().__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -82,7 +83,7 @@ class HansenDataset(InMemoryDataset):
                 continue
             data = from_smiles(smiles)
             data.y = label
-            node_paths, edge_paths = shortest_path_distance(data.edge_index)
+            node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
             data.node_paths = node_paths
             data.edge_paths = edge_paths
             data_list.append(data)

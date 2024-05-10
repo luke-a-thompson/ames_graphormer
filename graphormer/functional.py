@@ -4,13 +4,13 @@ import gnn_tools
 import torch
 
 
-def shortest_path_distance(edge_index: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+def shortest_path_distance(edge_index: torch.Tensor, max_distance: int = 5) -> Tuple[torch.Tensor, torch.Tensor]:
     edges = [(x.item() + 1, y.item() + 1) for x, y in zip(edge_index[0], edge_index[1])]
 
     # Insert VNODE, disconnected to allow physical paths between nodes in SPD
     edges.insert(0, (0, 0))
 
-    node_paths, edge_paths = gnn_tools.shortest_paths(edges, 5)  # type: ignore
+    node_paths, edge_paths = gnn_tools.shortest_paths(edges, max_distance)  # type: ignore
     node_paths_tensor = torch.Tensor(node_paths).int()
     edge_paths_tensor = torch.Tensor(edge_paths).int()
 

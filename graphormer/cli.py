@@ -164,10 +164,10 @@ def train(
 
     if ames_dataset == "Honma":
         from data.data_cleaning import HonmaDataset
-        dataset = HonmaDataset(data)
+        dataset = HonmaDataset(data, max_distance=max_path_distance)
     elif ames_dataset == "Hansen":
         from data.data_cleaning import HansenDataset
-        dataset = HansenDataset(data)
+        dataset = HansenDataset(data, max_distance=max_path_distance)
     else:
         raise ValueError(f"Unknown dataset {data}")
 
@@ -264,7 +264,7 @@ def train(
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(), clip_grad_norm, error_if_nonfinite=True)
 
-            if batch_idx % accumulation_steps == 0:
+            if should_step(batch_idx, accumulation_steps, train_batches_per_epoch):
                 optimizer.step()
                 optimizer.zero_grad()
 
@@ -408,9 +408,15 @@ def inference(
 def create_loaders(
     dataset: InMemoryDataset, test_size: float, batch_size: int, random_state: int, ames_dataset: str | None = None
 ) -> Tuple[DataLoader, DataLoader]:
+    dataloader_optimization_params = {
+        "pin_memory": True,
+        "num_workers": 4,
+        "prefetch_factor": 4,
+        "persistent_workers": True,
+    }
     if ames_dataset == "Hansen":
-        train_loader = DataLoader(dataset[:12140], batch_size=batch_size, shuffle=True)
-        test_loader = DataLoader(dataset[12140:], batch_size=batch_size)
+        train_loader = DataLoader(dataset[:12140], batch_size=batch_size, shuffle=True, **dataloader_optimization_params) #type: ignore
+        test_loader = DataLoader(dataset[12140:], batch_size=batch_size, **dataloader_optimization_params)# type: ignore
     else:
         test_ids, train_ids = train_test_split(
             range(len(dataset)), test_size=test_size, random_state=random_state
@@ -419,10 +425,12 @@ def create_loaders(
             Subset(dataset, train_ids),  # type: ignore
             batch_size=batch_size,
             shuffle=True,
+            **dataloader_optimization_params,
         )
         test_loader = DataLoader(
             Subset(dataset, test_ids),  # type: ignore
             batch_size=batch_size,
+            **dataloader_optimization_params,
         )
     return train_loader, test_loader
 
@@ -516,3 +524,12 @@ def load_from_checkpoint(
     print(f"Successfully loaded model {name} at epoch {start_epoch}")
     del checkpoint
     return model, optimizer, scheduler, train_loader, test_loader, loss_function, start_epoch
+
+def should_step(batch_idx: int, accumulation_steps: int, train_batches_per_epoch: int) -> bool:
+    if accumulation_steps <= 1:
+        return True
+    if batch_idx > 0 and (batch_idx + 1) % accumulation_steps == 0:
+        return True
+    if batch_idx >= train_batches_per_epoch - 1:
+        return True
+    return False

@@ -213,14 +213,10 @@ class GraphormerEncoderLayer(nn.Module):
         self.hidden_dim = hidden_dim
         self.n_heads = n_heads
 
-        self.att_norm = nn.LayerNorm(hidden_dim)
         self.attention = GraphormerMultiHeadAttention(
             num_heads=n_heads,
             hidden_dim=hidden_dim,
         )
-        self.ln_1 = nn.LayerNorm(hidden_dim)
-        self.ln_2 = nn.LayerNorm(hidden_dim)
-        self.ffn_norm = nn.LayerNorm(hidden_dim)
         self.ffn = FeedForwardNetwork(hidden_dim, ffn_dim, hidden_dim, ffn_dropout)
 
     def forward(
@@ -232,27 +228,33 @@ class GraphormerEncoderLayer(nn.Module):
         """
         Implements forward pass of the Graphormer encoder layer.
 
-        The correct sequence for operations with residual connections and layer normalization is:
-        1. LayerNorm (LN) is applied to the input.
-        2. The LayerNorm'd input is passed to MHA or FFN.
+        The correct sequence for operations with residual connections and layer rescaling is:
+        1. Rescale (RS) is applied to the input.
+        2. The rescaled input is passed to MHA or FFN.
         3. The MHA or FFN output is added to the original input, x (residual connection).
         4. The combined (MHA_out + x) output goes through the ffn.
 
         This results in the following operations:
-        h′(l) = MHA(LN(h(l−1))) + h(l−1)
-        h(l) = FFN(LN(h′(l))) + h′(l)
+        h′(l) = MHA(RS(h(l−1))) + h(l−1)
+        h(l) = FFN(RS(h′(l))) + h′(l)
 
         :param x: node embedding
         :param spatial_encoding: spatial encoding
         :param edge_encoding: encoding of the edges
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
-        att_input = self.att_norm(x)
+        att_input = rescale(x)
         att_output = self.attention(att_input, spatial_encoding, edge_encoding) + x
         pad_mask = torch.any(att_output == 0, dim=-1)
 
-        ffn_input = self.ffn_norm(att_output)
+        ffn_input = rescale(x)
         ffn_output = self.ffn(ffn_input) + att_output
         ffn_output[pad_mask] = 0
 
         return ffn_output
+
+def rescale(x: torch.Tensor) -> torch.Tensor:
+    max_val = torch.max(torch.abs(x), dim=-1).values.unsqueeze(-1)
+    zero_mask = max_val == 0
+    max_val[zero_mask] = 1
+    return x / max_val

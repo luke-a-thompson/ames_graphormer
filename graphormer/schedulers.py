@@ -50,6 +50,7 @@ class GreedyLR(LRScheduler):
         self.best_loss = float("inf")
         self._last_lr = [x['lr'] for x in optimizer.param_groups]
         self.last_epoch = 0
+        self.has_reset = False
 
         if isinstance(min_lr, (list, tuple)):
             if len(min_lr) != len(optimizer.param_groups):
@@ -102,10 +103,14 @@ class GreedyLR(LRScheduler):
             self._reduce_lr()
             self.warmup_counter = 0
 
-        if self.reset > 0 and epoch > self.reset:
+        if self.reset > 0 and epoch > self.reset and not self.has_reset:
             self._reset_lr()
             self.num_good_epochs = 0
             self.num_bad_epochs = 0
+            self.warmup_counter = 0
+            self.cooldown_counter = 0
+            self.best_loss = float("-inf")
+            self.has_reset = True
             if self.smooth:
                 self.window = []
 
