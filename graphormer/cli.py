@@ -224,7 +224,7 @@ def train(
     assert loss_function is not None
     assert scheduler is not None
 
-    model_init_print(model_parameters, model, dataset.num_node_features)
+    model_init_print(model_parameters, (train_loader, test_loader), model, dataset.num_node_features)
     progress_bar = tqdm(total=0, desc="Initializing...", unit="batch")
     train_batches_per_epoch = len(train_loader)
     eval_batches_per_epoch = len(test_loader)
@@ -360,6 +360,9 @@ def train(
 
 @click.command()
 @click.option("--data", default="data")
+@click.option("--ames_dataset", default="Honma")
+@click.option("--max_path_distance", default=5)
+@click.option("--test_size", default=0.2)
 @click.option("--monte_carlo_dropout", default=False)
 @click.option("--state_dict", default="pretrained_models/Graphormer_checkpoint-1_15-04-24.pt")
 @click.option("--random_state", default=42)
@@ -367,6 +370,9 @@ def train(
 @click.option("--torch_device", default="cuda")
 def inference(
     data: str,
+    ames_dataset: str,
+    max_path_distance: int,
+    test_size: float,
     monte_carlo_dropout: bool,
     state_dict: str,
     random_state: int,
@@ -375,7 +381,16 @@ def inference(
 ) -> torch.Tensor:
     state_dict = torch.load(state_dict)
 
-    dataset = HonmaDataset(data)
+    if ames_dataset == "Honma":
+        from data.data_cleaning import HonmaDataset
+        dataset = HonmaDataset(data, max_distance=max_path_distance)
+        dataset = dataset[12140:]
+    elif ames_dataset == "Hansen":
+        from data.data_cleaning import HansenDataset
+        dataset = HansenDataset(data, max_distance=max_path_distance)
+        raise NotImplementedError("Hansen dataset not implemented yet")
+    else:
+        raise ValueError(f"Unknown dataset {data}")
 
     device = torch.device(torch_device)
     model = Graphormer(
@@ -414,7 +429,7 @@ def create_loaders(
         "prefetch_factor": 4,
         "persistent_workers": True,
     }
-    if ames_dataset == "Hansen":
+    if ames_dataset == "Honma":
         train_loader = DataLoader(dataset[:12140], batch_size=batch_size, shuffle=True, **dataloader_optimization_params) #type: ignore
         test_loader = DataLoader(dataset[12140:], batch_size=batch_size, **dataloader_optimization_params)# type: ignore
     else:

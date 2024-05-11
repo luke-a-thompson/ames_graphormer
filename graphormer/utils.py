@@ -87,13 +87,13 @@ def save_model_weights(
         print(f"Failed to save {name}. Error: {e}")
 
 
-def model_init_print(model_parameters: Dict[str, int | float], model=None, input_size=None) -> Dict[str, int | float]:
+def model_init_print(model_parameters: Dict[str, int | float], dataloaders: tuple, model=None, input_size=None) -> Dict[str, int | float]:
     from torchinfo import summary
 
     if model and input_size:
         summary(model)
 
-    print_model_parameters_table(model_parameters)
+    print_model_parameters_table(model_parameters, dataloaders)
     save_model_parameters(model_parameters)
 
     return model_parameters
@@ -129,7 +129,7 @@ def save_model_parameters(model_parameters: dict[str, int | float]) -> dict[str,
     return model_parameters
 
 
-def print_model_parameters_table(parameters_dict: Dict[str, int | float]):
+def print_model_parameters_table(parameters_dict: Dict[str, int | float], dataloaders: tuple) -> None:
     """
     Display an overview of the training parameters.
 
@@ -157,7 +157,12 @@ def print_model_parameters_table(parameters_dict: Dict[str, int | float]):
     )
     table.add_column("Value", overflow="fold")
 
+    if dataloaders:
+        table.add_row("Train Dataset Size", str(len(dataloaders[0].dataset)))
+        table.add_row("Test Dataset Size", str(len(dataloaders[1].dataset)))
+
     for name, value in parameters_dict.items():
         table.add_row(name, str(value))
+
 
     console.print(table)
