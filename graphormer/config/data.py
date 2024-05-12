@@ -33,14 +33,14 @@ class DataConfig:
             "persistent_workers": True,
         }
         match self.dataset_type:
-            case DatasetType.HONMA:
+            case DatasetType.HANSEN:
                 if self.test_size is None:
-                    raise AttributeError("test_size is not defined for HonmaDataset")
+                    raise AttributeError("test_size is not defined for HansenDataset")
                 if self.random_state is None:
-                    raise AttributeError("random_state is not defined for HonmaDataset")
-                from data.data_cleaning import HonmaDataset
+                    raise AttributeError("random_state is not defined for HansenDataset")
+                from data.data_cleaning import HansenDataset
 
-                dataset = HonmaDataset(self.data_dir, max_distance=self.max_path_distance)
+                dataset = HansenDataset(self.data_dir, max_distance=self.max_path_distance)
                 self.num_node_features = dataset.num_node_features
                 self.num_edge_features = dataset.num_edge_features
                 self.num_classes = dataset.num_classes
@@ -59,10 +59,10 @@ class DataConfig:
                     **dataloader_optimization_params,
                 )
                 return train_loader, test_loader
-            case DatasetType.HANSEN:
-                from data.data_cleaning import HansenDataset
+            case DatasetType.HONMA:
+                from data.data_cleaning import HonmaDataset
 
-                dataset = HansenDataset(self.data_dir, max_distance=self.max_path_distance)
+                dataset = HonmaDataset(self.data_dir, max_distance=self.max_path_distance)
                 self.num_node_features = dataset.num_node_features
                 self.num_edge_features = dataset.num_edge_features
                 self.num_classes = dataset.num_classes

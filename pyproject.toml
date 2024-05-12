@@ -9,6 +9,7 @@ readme = "README.md"
 [tool.poetry.scripts]
 train = "graphormer.cli:train"
 inference = "graphormer.cli:inference"
+tune = "graphormer.cli:tune"
 
 [[tool.poetry.packages]]
 include = "graphormer"
@@ -30,6 +31,7 @@ gnn_tools = {path = "./gnn-tools", develop=true}
 openpyxl = "^3.1.2"
 rdkit = "^2023.9.6"
 nvidia-ml-py = "^12.550.52"
+optuna = "^3.6.1"
 
 [tool.black]
 line-length = 120

@@ -171,3 +171,4 @@ cython_debug/
 **/**/*.xlsx
 **/**/*.csv
 hparams/*
+*.sqlite3

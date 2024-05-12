@@ -1,11 +1,16 @@
 
 import click
 import tomllib
+from optuna.pruners import HyperbandPruner
+from optuna.samplers import TPESampler
+from optuna.trial import Trial
 import torch
 from torch_geometric.loader import DataLoader
+import optuna
 
 from graphormer.config.hparams import HyperparameterConfig
 from graphormer.config.options import LossReductionType, OptimizerType, SchedulerType, DatasetType
+from graphormer.config.tuning_hparams import TuningHyperparameterConfig
 from graphormer.model import Graphormer
 from graphormer.train import train_model
 
@@ -79,6 +84,93 @@ def train(**kwargs):
     hparam_config.load_from_checkpoint()
     torch.manual_seed(hparam_config.random_state)
     train_model(hparam_config)
+
+
+@click.command()
+@click.option(
+    "-c",
+    "--config",
+    type=click.Path(dir_okay=False),
+    is_eager=True,
+    expose_value=False,
+    help="Read option values from the specified config file",
+    callback=configure,
+    default = "default_tuning_hparams.toml"
+)
+@click.option("--datadir", default="data")
+@click.option("--logdir", default="optuna_runs")
+@click.option("--dataset", type=click.Choice(DatasetType, case_sensitive=False), default=DatasetType.HONMA) # type: ignore
+@click.option("--num_layers", default=3)
+@click.option("--hidden_dim", default=128)
+@click.option("--edge_embedding_dim", default=128)
+@click.option("--ffn_hidden_dim", default=80)
+@click.option("--n_heads", default=4)
+@click.option("--max_in_degree", default=5)
+@click.option("--max_out_degree", default=5)
+@click.option("--max_path_distance", default=5)
+@click.option("--test_size", default=0.8)
+@click.option("--random_state", default=None, type=click.INT)
+@click.option("--min_batch_size", default=16)
+@click.option("--max_batch_size", default=1024)
+@click.option("--min_lr", default=3e-6)
+@click.option("--max_lr", default=1e-2)
+@click.option("--min_b1", default=0.7)
+@click.option("--max_b1", default=0.99)
+@click.option("--min_b2", default=0.99)
+@click.option("--max_b2", default=0.9999)
+@click.option("--min_weight_decay", default=0.0)
+@click.option("--max_weight_decay", default=1e-3)
+@click.option("--min_eps", default=1e-10)
+@click.option("--max_eps", default=1e-7)
+@click.option("--min_momentum", default=0.0)
+@click.option("--max_momentum", default=1.0)
+@click.option("--min_dampening", default=0.0)
+@click.option("--max_dampening", default=1.0)
+@click.option("--min_clip_grad_norm", default=1.0)
+@click.option("--max_clip_grad_norm", default=7.0)
+@click.option("--torch_device", default="cuda")
+@click.option("--epochs", default=20)
+@click.option("--min_lr_power", default=0.1)
+@click.option("--max_lr_power", default=0.9)
+@click.option("--min_lr_patience", default=0)
+@click.option("--max_lr_patience", default=5)
+@click.option("--min_lr_cooldown", default=0)
+@click.option("--max_lr_cooldown", default=3)
+@click.option("--min_lr_min", default=1e-7)
+@click.option("--max_lr_min", default=3e-5)
+@click.option("--min_lr_max", default=1e-4)
+@click.option("--max_lr_max", default=1e-2)
+@click.option("--min_lr_warmup", default=0)
+@click.option("--max_lr_warmup", default=3)
+@click.option("--min_lr_window", default=1)
+@click.option("--max_lr_window", default=5)
+@click.option("--min_lr_reset", default=0)
+@click.option("--max_lr_reset", default=7)
+@click.option("--min_lr_factor", default=0.1)
+@click.option("--max_lr_factor", default=0.9)
+@click.option("--study_name", default=None)
+@click.option("--min_accumulation_steps", default=1)
+@click.option("--max_accumulation_steps", default=4)
+@click.option("--checkpoint_dir", default="optuna_models")
+@click.option("--min_dropout", default=0.0)
+@click.option("--max_dropout", default=0.5)
+@click.option("--tune_size", default=0.25)
+def tune(**kwargs):
+    hparam_config = TuningHyperparameterConfig(**kwargs)
+    study = optuna.create_study(
+        direction="minimize",
+        study_name=hparam_config.study_name, 
+        storage="sqlite:///db.sqlite3", 
+        sampler=TPESampler(),
+        pruner=HyperbandPruner(),
+        load_if_exists=True,
+    )
+    def objective(trial: Trial) -> float:
+        trial_hparams = hparam_config.create_hyperparameters(trial)
+        return train_model(trial_hparams, trial)
+    study.optimize(objective, n_trials=hparam_config.n_trials)
+    print(f"Best value: {study.best_value} (params: {study.best_params})")
+
 
 
 @click.command()

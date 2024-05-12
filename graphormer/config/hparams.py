@@ -30,6 +30,7 @@ class HyperparameterConfig:
         node_feature_dim: Optional[int] = None,
         edge_feature_dim: Optional[int] = None,
         test_size: Optional[float] = None,
+        tune_size: float = 1.0,
         random_state: int = int(random() * 1e9),
         lr: Optional[float] = None,
         b1: Optional[float] = None,
@@ -86,6 +87,7 @@ class HyperparameterConfig:
         self.node_feature_dim = node_feature_dim
         self.edge_feature_dim = edge_feature_dim
         self.test_size = test_size
+        self.tune_size = tune_size
         self.random_state = random_state
         self.lr = lr
         self.b1 = b1

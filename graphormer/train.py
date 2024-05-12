@@ -1,3 +1,5 @@
+from typing import Optional
+import optuna
 import torch
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
@@ -6,10 +8,12 @@ from graphormer.cli import LossReductionType
 from graphormer.schedulers import GreedyLR
 from graphormer.config.utils import calculate_pos_weight, model_init_print, save_checkpoint
 from graphormer.config.hparams import HyperparameterConfig
+from optuna.trial import Trial
 
 
 def train_model(
         hparam_config: HyperparameterConfig,
+        trial: Optional[Trial] = None,
     ):
     logging_config = hparam_config.logging_config()
     data_config = hparam_config.data_config()
@@ -17,6 +21,7 @@ def train_model(
     loss_config = hparam_config.loss_config()
     optimizer_config = hparam_config.optimizer_config()
     scheduler_config = hparam_config.scheduler_config()
+    assert hparam_config.batch_size is not None
 
     writer = logging_config.build()
     train_loader, test_loader = data_config.build()
@@ -39,6 +44,7 @@ def train_model(
     progress_bar = tqdm(total=0, desc="Initializing...", unit="batch")
     train_batches_per_epoch = len(train_loader)
     eval_batches_per_epoch = len(test_loader)
+    avg_eval_loss = float("inf")
     for epoch in range(start_epoch, epochs):
         total_train_loss = 0.0
         total_eval_loss = 0.0
@@ -51,10 +57,12 @@ def train_model(
         avg_loss = 0.0
         train_batch_num = epoch * train_batches_per_epoch
         for batch_idx, batch in enumerate(train_loader):
+            if batch_idx / train_batches_per_epoch > hparam_config.tune_size and trial is not None:
+                break
             batch.to(device)
             y = batch.y.to(device)
 
-            if train_batch_num == 0:
+            if train_batch_num == 0 and trial is None:
                 writer.add_graph(
                     model, [batch.x, batch.edge_index, batch.edge_attr,
                             batch.ptr, batch.node_paths, batch.edge_paths]
@@ -138,6 +146,8 @@ def train_model(
             scheduler.step(total_eval_loss)
 
         avg_eval_loss = total_eval_loss / len(test_loader)
+        if loss_reduction == LossReductionType.SUM:
+            avg_eval_loss /= float(hparam_config.batch_size)
         progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
         bac = balanced_accuracy_score(all_eval_labels, all_eval_preds)
         ac = accuracy_score(all_eval_labels, all_eval_preds)
@@ -153,7 +163,7 @@ def train_model(
                 avg_eval_loss:.4f} | Eval BAC: {bac:.4f} | Eval ACC: {ac:.4f}"
         )
 
-        if epoch % hparam_config.checkpt_save_interval == 0:
+        if epoch % hparam_config.checkpt_save_interval == 0 and trial is None:
             save_checkpoint(
                 epoch,
                 hparam_config,
@@ -163,7 +173,14 @@ def train_model(
                 scheduler,
             )
 
+        if trial is not None:
+            trial.report(avg_eval_loss, epoch)
+            if trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
+
+
     progress_bar.close()
+    return avg_eval_loss
 
 
 def should_step(batch_idx: int, accumulation_steps: int, train_batches_per_epoch: int) -> bool:
