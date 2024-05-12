@@ -1,32 +1,13 @@
-import os
-import random
-import tomllib
-from enum import Enum
-from typing import Dict, Optional, Tuple
 
 import click
+import tomllib
 import torch
-from sklearn.metrics import accuracy_score, balanced_accuracy_score
-from sklearn.model_selection import train_test_split
-from tensorboardX import SummaryWriter
-from torch import nn
-from torch.nn.modules.loss import _Loss
-from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LRScheduler, PolynomialLR, ReduceLROnPlateau
-from torch.utils.data import Subset
-from torch_geometric.data import InMemoryDataset
 from torch_geometric.loader import DataLoader
-from tqdm import tqdm
 
+from graphormer.config.hparams import HyperparameterConfig
+from graphormer.config.options import LossReductionType, OptimizerType, SchedulerType, DatasetType
 from graphormer.model import Graphormer
-from graphormer.schedulers import GreedyLR
-from graphormer.utils import model_init_print, save_model_weights
-
-
-class Scheduler(Enum):
-    GREEDY = "greedy"
-    POLYNOMIAL = "polynomial"
-    PLATEAU = "plateau"
+from graphormer.train import train_model
 
 
 def configure(ctx, param, filename):
@@ -46,8 +27,9 @@ def configure(ctx, param, filename):
     callback=configure,
     default = "default_hparams.toml"
 )
-@click.option("--data", default="data")
-@click.option("--ames_dataset", default="Honma")
+@click.option("--datadir", default="data")
+@click.option("--logdir", default="runs")
+@click.option("--dataset", type=click.Choice(DatasetType, case_sensitive=False), default=DatasetType.HONMA) # type: ignore
 @click.option("--num_layers", default=3)
 @click.option("--hidden_dim", default=128)
 @click.option("--edge_embedding_dim", default=128)
@@ -64,15 +46,19 @@ def configure(ctx, param, filename):
 @click.option("--b2", default=0.999)
 @click.option("--weight_decay", default=0.0)
 @click.option("--eps", default=1e-8)
+@click.option("--nesterov", default=False)
+@click.option("--momentum", default=0.0)
+@click.option("--dampening", default=0.0)
 @click.option("--clip_grad_norm", default=5.0)
 @click.option("--torch_device", default="cuda")
 @click.option("--epochs", default=10)
 @click.option("--lr_power", default=0.5)
 @click.option(
     "--scheduler_type",
-    type=click.Choice([x.value for x in Scheduler], case_sensitive=False),
-    default=Scheduler.GREEDY.value,
+    type=click.Choice(SchedulerType, case_sensitive=False), # type: ignore
+    default=SchedulerType.GREEDY,
 )
+@click.option("--optimizer_type", type=click.Choice(OptimizerType, case_sensitive=False), default=OptimizerType.ADAMW) # type: ignore
 @click.option("--lr_patience", default=4)
 @click.option("--lr_cooldown", default=2)
 @click.option("--lr_min", default=1e-6)
@@ -85,277 +71,13 @@ def configure(ctx, param, filename):
 @click.option("--name", default=None)
 @click.option("--checkpt_save_interval", default=5)
 @click.option("--accumulation_steps", default=1)
-@click.option("--loss_reduction", default="mean")
-def train(
-    data: str,
-    ames_dataset: str,
-    num_layers: int,
-    hidden_dim: int,
-    edge_embedding_dim: int,
-    ffn_hidden_dim: int,
-    n_heads: int,
-    max_in_degree: int,
-    max_out_degree: int,
-    max_path_distance: int,
-    test_size: float,
-    random_state: Optional[int],
-    batch_size: int,
-    lr: float,
-    b1: float,
-    b2: float,
-    weight_decay: float,
-    eps: float,
-    clip_grad_norm: float,
-    torch_device: str,
-    epochs: int,
-    lr_power: float,
-    scheduler_type: str,
-    lr_patience: int,
-    lr_cooldown: int,
-    lr_min: float,
-    lr_max: float,
-    lr_warmup: int,
-    lr_smooth: bool,
-    lr_window: int,
-    lr_reset: int,
-    lr_factor: float,
-    name: Optional[str],
-    checkpt_save_interval: int,
-    accumulation_steps: int,
-    loss_reduction: str,
-):
-    if random_state is None:
-        random_state = int(random.random() * 100000000)
-    assert random_state is not None
-
-    effective_batch_size = accumulation_steps * batch_size
-    effective_lr_min = lr_min / accumulation_steps if loss_reduction == "mean" else lr_min / effective_batch_size
-    effective_lr_max = lr_max / accumulation_steps if loss_reduction == "mean" else lr_max / effective_batch_size
-    effective_lr = lr / accumulation_steps if loss_reduction == "mean" else lr / effective_batch_size
-
-    lr_params = {
-        "lr_power": lr_power,
-        "lr_patience": lr_patience,
-        "lr_cooldown": lr_cooldown,
-        "lr_min": effective_lr_min,
-        "lr_max": effective_lr_max,
-        "lr_warmup": lr_warmup,
-        "lr_smooth": lr_smooth,
-        "lr_window": lr_window,
-        "lr_reset": lr_reset,
-        "lr_factor": lr_factor,
-    }
-
-    optimizer_params = {
-        "lr": effective_lr,
-        "betas": (b1, b2),
-        "weight_decay": weight_decay,
-        "eps": eps,
-    }
-
-    model_parameters = locals().copy()
-    logdir = None
-    if name is not None:
-        logdir = f"runs/{name}"
-    writer = SummaryWriter(logdir, flush_secs=10)
-
-    torch.manual_seed(random_state)
-    device = torch.device(torch_device)
-
-    if ames_dataset == "Honma":
-        from data.data_cleaning import HonmaDataset
-        dataset = HonmaDataset(data, max_distance=max_path_distance)
-    elif ames_dataset == "Hansen":
-        from data.data_cleaning import HansenDataset
-        dataset = HansenDataset(data, max_distance=max_path_distance)
-    else:
-        raise ValueError(f"Unknown dataset {data}")
-
-    start_epoch = 0
-    train_loader = None
-    test_loader = None
-    model = None
-    optimizer = None
-    loss_function = None
-    scheduler = None
-
-    if name is not None and os.path.exists(f"pretrained_models/{name}.pt"):
-        model, optimizer, scheduler, train_loader, test_loader, loss_function, start_epoch = load_from_checkpoint(
-            name,
-            dataset,
-            scheduler_type,
-            epochs,
-            lr_params,
-            optimizer_params,
-            test_size,
-            batch_size,
-            device,
-        )
-    else:
-        model = Graphormer(
-            num_layers=num_layers,
-            node_feature_dim=dataset.num_node_features,
-            hidden_dim=hidden_dim,
-            edge_feature_dim=dataset.num_edge_features,
-            edge_embedding_dim=edge_embedding_dim,
-            ffn_hidden_dim=ffn_hidden_dim,
-            output_dim=dataset[0].y.shape[0],  # type: ignore
-            n_heads=n_heads,
-            max_in_degree=max_in_degree,
-            max_out_degree=max_out_degree,
-            max_path_distance=max_path_distance,
-        )
-        model.to(device)
-
-        train_loader, test_loader = create_loaders(
-            dataset, test_size, batch_size, random_state, ames_dataset)
-        optimizer = torch.optim.AdamW(model.parameters(), **optimizer_params)
-        scheduler = get_scheduler(
-            scheduler_type, optimizer, epochs, **lr_params)
-
-        pos_weight = calculate_pos_weight(train_loader).to(device)
-        loss_function = nn.BCEWithLogitsLoss(
-            reduction="mean", pos_weight=pos_weight)
-
-    assert train_loader is not None
-    assert test_loader is not None
-    assert model is not None
-    assert optimizer is not None
-    assert loss_function is not None
-    assert scheduler is not None
-
-    model_init_print(model_parameters, (train_loader, test_loader), model, dataset.num_node_features)
-    progress_bar = tqdm(total=0, desc="Initializing...", unit="batch")
-    train_batches_per_epoch = len(train_loader)
-    eval_batches_per_epoch = len(test_loader)
-    for epoch in range(start_epoch, epochs):
-        total_train_loss = 0.0
-        total_eval_loss = 0.0
-
-        # Set total length for training phase and update description
-        progress_bar.reset(total=len(train_loader))
-        progress_bar.set_description(f"Epoch {epoch+1}/{epochs} Train")
-
-        model.train()
-        avg_loss = 0.0
-        train_batch_num = 0 + epoch * train_batches_per_epoch
-        for batch_idx, batch in enumerate(train_loader):
-            batch.to(device)
-            y = batch.y.to(device)
-
-            if train_batch_num == 0:
-                writer.add_graph(
-                    model, [batch.x, batch.edge_index, batch.edge_attr,
-                            batch.ptr, batch.node_paths, batch.edge_paths]
-                )
-
-            output = model(
-                batch.x,
-                batch.edge_index,
-                batch.edge_attr,
-                batch.ptr,
-                batch.node_paths,
-                batch.edge_paths,
-            )
-
-            loss = loss_function(output, y)
-            loss.backward()
-
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(), clip_grad_norm, error_if_nonfinite=True)
-
-            if should_step(batch_idx, accumulation_steps, train_batches_per_epoch):
-                optimizer.step()
-                optimizer.zero_grad()
-
-            batch_loss = loss.item()
-            writer.add_scalar("train/batch_loss", batch_loss, train_batch_num)
-            writer.add_scalar("train/sample_loss", batch_loss /
-                              output.shape[0] if loss_reduction == "sum" else batch_loss, train_batch_num)
-            total_train_loss += batch_loss
-
-            avg_loss = total_train_loss / (progress_bar.n + 1)
-            writer.add_scalar("train/avg_loss", avg_loss, train_batch_num)
-
-            progress_bar.set_postfix_str(f"Avg Loss: {avg_loss:.4f}")
-            progress_bar.update()  # Increment the progress bar
-            train_batch_num += 1
-        if isinstance(scheduler, PolynomialLR):
-            scheduler.step()
-        writer.add_scalar("train/lr", scheduler.get_last_lr()[0] * accumulation_steps if loss_reduction == "mean" else scheduler.get_last_lr()[0] * effective_batch_size, epoch)
-
-        # Prepare for the evaluation phase
-        progress_bar.reset(total=len(test_loader))
-        progress_bar.set_description(f"Epoch {epoch+1}/{epochs} Eval")
-
-        all_eval_labels = []
-        all_eval_preds = []
-
-        model.eval()
-        eval_batch_num = 0 + epoch * eval_batches_per_epoch
-        for batch in test_loader:
-            batch.to(device)
-            y = batch.y.to(device)
-            with torch.no_grad():
-                output = model(
-                    batch.x,
-                    batch.edge_index,
-                    batch.edge_attr,
-                    batch.ptr,
-                    batch.node_paths,
-                    batch.edge_paths,
-                )
-                loss = loss_function(output, y)
-            batch_loss: float = loss.item()
-            writer.add_scalar("eval/batch_loss", batch_loss, eval_batch_num)
-            total_eval_loss += batch_loss
-
-            eval_preds = torch.round(torch.sigmoid(output)).tolist()
-            eval_labels = y.cpu().numpy()
-            if sum(eval_labels) > 0:
-                batch_bac = balanced_accuracy_score(eval_labels, eval_preds)
-                writer.add_scalar("eval/batch_bac", batch_bac, eval_batch_num)
-
-            all_eval_preds.extend(eval_preds)
-            all_eval_labels.extend(eval_labels)
-
-            progress_bar.update()  # Manually increment for each batch in eval
-            eval_batch_num += 1
-
-        if isinstance(scheduler, (ReduceLROnPlateau, GreedyLR)):
-            scheduler.step(total_eval_loss)
-
-        avg_eval_loss = total_eval_loss / len(test_loader)
-        progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
-        bac = balanced_accuracy_score(all_eval_labels, all_eval_preds)
-        ac = accuracy_score(all_eval_labels, all_eval_preds)
-        bac_adj = balanced_accuracy_score(
-            all_eval_labels, all_eval_preds, adjusted=True)
-        writer.add_scalar("eval/acc", ac, epoch)
-        writer.add_scalar("eval/bac", bac, epoch)
-        writer.add_scalar("eval/bac_adj", bac_adj, epoch)
-        writer.add_scalar("eval/avg_eval_loss", avg_eval_loss, epoch)
-
-        print(
-            f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
-                avg_eval_loss:.4f} | Eval BAC: {bac:.4f} | Eval ACC: {ac:.4f}"
-        )
-
-        assert random_state is not None
-        if epoch % checkpt_save_interval == 0:
-            save_model_weights(
-                model,
-                model_parameters,
-                optimizer,
-                epoch,
-                loss_function,
-                random_state,
-                last_train_loss=avg_loss,
-                lr_scheduler=scheduler,
-                model_name=name,
-            )
-
-    progress_bar.close()
+@click.option("--loss_reduction", type=click.Choice(LossReductionType, case_sensitive=False), default=LossReductionType.MEAN) #type: ignore
+@click.option("--checkpoint_dir", default="pretrained_models")
+def train(**kwargs):
+    hparam_config = HyperparameterConfig(**kwargs)
+    hparam_config.load_from_checkpoint()
+    torch.manual_seed(hparam_config.random_state)
+    train_model(hparam_config)
 
 
 @click.command()
@@ -420,6 +142,7 @@ def inference(
     return output
 
 
+<<<<<<< HEAD
 def create_loaders(
     dataset: InMemoryDataset, test_size: float, batch_size: int, random_state: int, ames_dataset: str | None = None
 ) -> Tuple[DataLoader, DataLoader]:
@@ -548,3 +271,5 @@ def should_step(batch_idx: int, accumulation_steps: int, train_batches_per_epoch
     if batch_idx >= train_batches_per_epoch - 1:
         return True
     return False
+=======
+>>>>>>> ea67f57 (feat: improve configuration)
