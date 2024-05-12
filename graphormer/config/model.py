@@ -16,6 +16,7 @@ class ModelConfig:
         self.max_in_degree = None
         self.max_out_degree = None
         self.max_path_distance = None
+        self.dropout = None
         self.state_dict = None
 
     def with_num_layers(self, num_layers: int) -> Self:
@@ -62,6 +63,10 @@ class ModelConfig:
         self.max_path_distance = max_path_distance
         return self
 
+    def with_dropout(self, dropout: float) -> Self:
+        self.dropout = dropout
+        return self
+
     def with_state_dict(self, state_dict: Dict) -> Self:
         self.state_dict = state_dict
         return self
@@ -89,6 +94,8 @@ class ModelConfig:
             raise AttributeError("max_out_degree is not defined for Graphormer")
         if self.max_path_distance is None:
             raise AttributeError("max_path_distance is not defined for Graphormer")
+        if self.dropout is None:
+            raise AttributeError("dropout is not defined for Graphormer")
 
         model = Graphormer(
             num_layers=self.num_layers,
@@ -102,6 +109,7 @@ class ModelConfig:
             max_in_degree=self.max_in_degree,
             max_out_degree=self.max_out_degree,
             max_path_distance=self.max_path_distance,
+            dropout=self.dropout
         )
 
         if self.state_dict is not None:

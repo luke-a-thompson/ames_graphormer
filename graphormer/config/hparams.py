@@ -67,6 +67,7 @@ class HyperparameterConfig:
         filename_suffix: Optional[str] = None,
         start_epoch: int = 0,
         checkpoint_dir: str = "pretrained_models",
+        dropout: Optional[float] = None
     ):
         if name is None:
             name = datetime.datetime.now().strftime("%d-%m-%y")
@@ -122,6 +123,7 @@ class HyperparameterConfig:
         self.filename_suffix = filename_suffix
         self.start_epoch = start_epoch
         self.checkpoint_dir = checkpoint_dir
+        self.dropout = dropout
         self.model_state_dict = None
         self.optimizer_state_dict = None
         self.scheduler_state_dict = None
@@ -170,6 +172,8 @@ class HyperparameterConfig:
             config = config.with_edge_feature_dim(self.edge_feature_dim)
         if self.max_path_distance is not None:
             config = config.with_max_path_distance(self.max_path_distance)
+        if self.dropout is not None:
+            config = config.with_dropout(self.dropout)
         if self.model_state_dict is not None:
             config = config.with_state_dict(self.model_state_dict)
             self.model_state_dict = None

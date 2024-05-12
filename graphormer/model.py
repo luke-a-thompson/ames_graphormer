@@ -19,6 +19,7 @@ class Graphormer(nn.Module):
         max_in_degree: int,
         max_out_degree: int,
         max_path_distance: int,
+        dropout: float = 0.05,
     ):
         """
         :param num_layers: number of Graphormer layers
@@ -67,6 +68,7 @@ class Graphormer(nn.Module):
                     hidden_dim=self.hidden_dim,
                     n_heads=self.n_heads,
                     ffn_dim=self.ffn_hidden_dim,
+                    ffn_dropout=dropout
                 )
                 for _ in range(self.num_layers)
             ]

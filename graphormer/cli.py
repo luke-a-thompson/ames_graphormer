@@ -73,6 +73,7 @@ def configure(ctx, param, filename):
 @click.option("--accumulation_steps", default=1)
 @click.option("--loss_reduction", type=click.Choice(LossReductionType, case_sensitive=False), default=LossReductionType.MEAN) #type: ignore
 @click.option("--checkpoint_dir", default="pretrained_models")
+@click.option("--dropout", default=0.05)
 def train(**kwargs):
     hparam_config = HyperparameterConfig(**kwargs)
     hparam_config.load_from_checkpoint()
