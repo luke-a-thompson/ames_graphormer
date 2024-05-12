@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Optional
 import torch
 from torch.nn.modules.loss import _Loss
 from torch_geometric.loader import DataLoader
@@ -49,16 +49,7 @@ def save_checkpoint(
         print(f"Failed to save {hparams.checkpoint_dir}/{hparams.name}. Error: {e}")
 
 
-def model_init_print(hparams: HyperparameterConfig, model=None):
-    from torchinfo import summary
-
-    if model:
-        summary(model)
-
-    print_model_parameters_table(vars(hparams))
-
-
-def print_model_parameters_table(parameters_dict: Dict[str, int | float]):
+def model_init_print(hparams: HyperparameterConfig, model: Optional[torch.nn.Module] = None, train_dataloader: Optional[DataLoader] = None, test_dataloader: Optional[DataLoader] = None):
     """
     Display an overview of the training parameters.
 
@@ -68,6 +59,12 @@ def print_model_parameters_table(parameters_dict: Dict[str, int | float]):
     Returns:
         None
     """
+
+    from torchinfo import summary
+
+    if model:
+        summary(model)
+
     from rich import box
     from rich.console import Console
     from rich.table import Table
@@ -86,7 +83,12 @@ def print_model_parameters_table(parameters_dict: Dict[str, int | float]):
     )
     table.add_column("Value", overflow="fold")
 
-    for name, value in parameters_dict.items():
+    if train_dataloader is not None:
+        table.add_row("Train Dataset Size", str(len(train_dataloader.dataset))) # type: ignore
+    if test_dataloader is not None:
+        table.add_row("Validation Dataset Size", str(len(test_dataloader.dataset))) # type: ignore
+
+    for name, value in vars(hparams).items():
         table.add_row(name, str(value))
 
     console.print(table)

@@ -34,7 +34,7 @@ def train_model(
     accumulation_steps = optimizer_config.accumulation_steps
     loss_reduction = optimizer_config.loss_reduction_type
 
-    model_init_print(hparam_config, model)
+    model_init_print(hparam_config, model, train_loader, test_loader)
 
     progress_bar = tqdm(total=0, desc="Initializing...", unit="batch")
     train_batches_per_epoch = len(train_loader)
