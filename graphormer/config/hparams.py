@@ -68,7 +68,7 @@ class HyperparameterConfig:
         filename_suffix: Optional[str] = None,
         start_epoch: int = 0,
         checkpoint_dir: str = "pretrained_models",
-        dropout: Optional[float] = None
+        dropout: Optional[float] = None,
     ):
         if name is None:
             name = datetime.datetime.now().strftime("%d-%m-%y")
@@ -291,13 +291,15 @@ class HyperparameterConfig:
         return config
 
     def load_from_checkpoint(self) -> Self:
+        device = torch.device(self.torch_device)
+
         if self.checkpoint_dir is None:
             return self
         checkpoint_path = f"{self.checkpoint_dir}/{self.name}.pt"
         if not os.path.exists(checkpoint_path):
             return self
-        device = torch.device(self.torch_device)
         checkpoint = torch.load(checkpoint_path, map_location=device)
+
         hparams: Dict[str, Any] = checkpoint["hyperparameters"]
         for key, value in hparams.items():
             if hasattr(self, key):
@@ -308,5 +310,22 @@ class HyperparameterConfig:
         self.scheduler_state_dict = checkpoint["scheduler_state_dict"]
         self.start_epoch = checkpoint["epoch"] + 1
         print(f"Successfully loaded model {self.name} at epoch {self.start_epoch}")
+        del checkpoint
+        return self
+
+    def load_for_inference(self) -> Self:
+        device = torch.device(self.torch_device)
+
+        checkpoint_path = f"{self.checkpoint_dir}/{self.name}.pt"
+        if not os.path.exists(checkpoint_path):
+            raise ValueError(f"Checkpoint {self.checkpoint_path} does not exist - Inference requires a trained model")
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+
+        hparams: Dict[str, Any] = checkpoint["hyperparameters"]
+        for key, value in hparams.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        self.model_state_dict = checkpoint["model_state_dict"]
+        print(f"Successfully loaded model {self.name} for inference")
         del checkpoint
         return self
