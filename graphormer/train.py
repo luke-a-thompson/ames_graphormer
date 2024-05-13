@@ -31,7 +31,8 @@ def train_model(
 
     writer = logging_config.build()
     if train_loader is None or test_loader is None:
-        train_loader, test_loader = data_config.build()
+        data_config.build()
+        train_loader, test_loader = data_config.for_training()
     assert data_config.num_node_features is not None
     assert data_config.num_edge_features is not None
     device = torch.device(hparam_config.torch_device)

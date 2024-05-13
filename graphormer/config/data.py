@@ -25,7 +25,7 @@ class DataConfig:
         self.test_size = test_size
         return self
 
-    def build(self) -> Tuple[DataLoader, DataLoader]:
+    def build(self) -> None:
         dataloader_optimization_params = {
             "pin_memory": True,
             "num_workers": 4,
@@ -47,18 +47,17 @@ class DataConfig:
                 test_ids, train_ids = train_test_split(
                     range(len(dataset)), test_size=self.test_size, random_state=self.random_state
                 )
-                train_loader = DataLoader(
+                self.train_loader = DataLoader(
                     Subset(dataset, train_ids),  # type: ignore
                     batch_size=self.batch_size,
                     shuffle=True,
                     **dataloader_optimization_params,
                 )
-                test_loader = DataLoader(
+                self.test_loader = DataLoader(
                     Subset(dataset, test_ids),  # type: ignore
                     batch_size=self.batch_size,
                     **dataloader_optimization_params,
                 )
-                return train_loader, test_loader
             case DatasetType.HONMA:
                 from data.data_cleaning import HonmaDataset
 
@@ -66,6 +65,20 @@ class DataConfig:
                 self.num_node_features = dataset.num_node_features
                 self.num_edge_features = dataset.num_edge_features
                 self.num_classes = dataset.num_classes
-                train_loader = DataLoader(dataset[:12140], batch_size=self.batch_size, shuffle=True, **dataloader_optimization_params)  # type: ignore
-                test_loader = DataLoader(dataset[12140:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
-                return train_loader, test_loader
+                self.train_loader = DataLoader(dataset[:12140], batch_size=self.batch_size, shuffle=True, **dataloader_optimization_params)  # type: ignore
+                self.test_loader = DataLoader(dataset[12140:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+
+    def for_training(self) -> Tuple[DataLoader, DataLoader]:
+        if not self.train_loader:
+            raise ValueError("Train loader not initialized. Call build method first.")
+        if not self.test_loader:
+            raise ValueError("Test loader not initialized. Call build method first.")
+        return self.train_loader, self.test_loader
+
+    def for_inference(self) -> DataLoader:
+        if not self.test_loader:
+            raise ValueError("Test loader not initialized. Call build method first.")
+        return self.test_loader
+
+    def str(self) -> str:
+        return f"{self.dataset_type} dataset"
