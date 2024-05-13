@@ -20,8 +20,7 @@ class TuningHyperparameterConfig:
         node_feature_dim: Optional[int] = None,
         edge_feature_dim: Optional[int] = None,
         max_path_distance: Optional[int] = None,
-        max_batch_size: Optional[int] = None,
-        min_batch_size: Optional[int] = None,
+        batch_size: Optional[int] = None,
         test_size: Optional[float] = None,
         tune_size: Optional[float] = None,
         # Model Parameters
@@ -75,8 +74,7 @@ class TuningHyperparameterConfig:
         logdir: Optional[str] = None,
         # Training Parameters
         epochs: int = 10,
-        max_accumulation_steps: Optional[int] = None,
-        min_accumulation_steps: Optional[int] = None,
+        accumulation_steps: Optional[int] = None,
     ):
         self.n_trials = n_trials
         self.study_name = study_name
@@ -88,8 +86,7 @@ class TuningHyperparameterConfig:
         self.node_feature_dim = node_feature_dim
         self.edge_feature_dim = edge_feature_dim
         self.max_path_distance = max_path_distance
-        self.max_batch_size = max_batch_size
-        self.min_batch_size = min_batch_size
+        self.batch_size = batch_size
         self.test_size = test_size
         self.tune_size = tune_size
 
@@ -148,14 +145,11 @@ class TuningHyperparameterConfig:
 
         # Training Parameters
         self.epochs = epochs
-        self.max_accumulation_steps = max_accumulation_steps
-        self.min_accumulation_steps = min_accumulation_steps
+        self.accumulation_steps = accumulation_steps
 
     def create_hyperparameters(self, trial: Trial) -> HyperparameterConfig:
-        if self.min_batch_size is None:
-            raise AttributeError("min_batch_size not defined for TuningHyperparameterConfig")
-        if self.max_batch_size is None:
-            raise AttributeError("max_batch_size not defined for TuningHyperparameterConfig")
+        if self.batch_size is None:
+            raise AttributeError("batch_size not defined for TuningHyperparameterConfig")
         if self.min_dropout is None:
             raise AttributeError("min_dropout not defined for TuningHyperparameterConfig")
         if self.max_dropout is None:
@@ -228,10 +222,8 @@ class TuningHyperparameterConfig:
             raise AttributeError("min_lr_factor not defined for TuningHyperparameterConfig")
         if self.max_lr_factor is None:
             raise AttributeError("max_lr_factor not defined for TuningHyperparameterConfig")
-        if self.min_accumulation_steps is None:
-            raise AttributeError("min_accumulation_steps not defined for TuningHyperparameterConfig")
-        if self.max_accumulation_steps is None:
-            raise AttributeError("max_accumulation_steps not defined for TuningHyperparameterConfig")
+        if self.accumulation_steps is None:
+            raise AttributeError("accumulation_steps not defined for TuningHyperparameterConfig")
         if self.tune_size is None:
             raise AttributeError("tune_size not defined for TuningHyperparameterConfig")
 
@@ -319,7 +311,7 @@ class TuningHyperparameterConfig:
             max_out_degree=self.max_out_degree,
             output_dim=self.output_dim,
             dropout=trial.suggest_float("dropout", self.min_dropout, self.max_dropout),
-            batch_size=trial.suggest_int("batch_size", self.min_batch_size, self.max_batch_size),
+            batch_size=self.batch_size,
             # Optimizer Parameters
             optimizer_type=optimizer_type,
             lr=trial.suggest_float("lr", self.min_lr, self.max_lr),
@@ -345,9 +337,7 @@ class TuningHyperparameterConfig:
             lr_smooth=lr_smooth,
             # Training Parameters
             epochs=self.epochs,
-            accumulation_steps=trial.suggest_int(
-                "accumulation_steps", self.min_accumulation_steps, self.max_accumulation_steps
-            ),
+            accumulation_steps=self.accumulation_steps,
             loss_reduction=loss_reduction_type,
             checkpoint_dir=self.checkpoint_dir,
             checkpt_save_interval=1000,

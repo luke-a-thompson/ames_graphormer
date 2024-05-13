@@ -95,6 +95,8 @@ def train_model(
             total_train_loss += batch_loss
 
             avg_loss = total_train_loss / (progress_bar.n + 1)
+            if loss_reduction == LossReductionType.SUM:
+                avg_loss /= hparam_config.batch_size
             writer.add_scalar("train/avg_loss", avg_loss, train_batch_num)
 
             progress_bar.set_postfix_str(f"Avg Loss: {avg_loss:.4f}")
