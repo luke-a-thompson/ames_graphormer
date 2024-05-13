@@ -44,20 +44,29 @@ class DataConfig:
                 self.num_node_features = dataset.num_node_features
                 self.num_edge_features = dataset.num_edge_features
                 self.num_classes = dataset.num_classes
-                test_ids, train_ids = train_test_split(
-                    range(len(dataset)), test_size=self.test_size, random_state=self.random_state
-                )
-                self.train_loader = DataLoader(
-                    Subset(dataset, train_ids),  # type: ignore
-                    batch_size=self.batch_size,
-                    shuffle=True,
-                    **dataloader_optimization_params,
-                )
-                self.test_loader = DataLoader(
-                    Subset(dataset, test_ids),  # type: ignore
-                    batch_size=self.batch_size,
-                    **dataloader_optimization_params,
-                )
+
+                if self.test_size is not None:
+                    test_ids, train_ids = train_test_split(
+                        range(len(dataset)), test_size=self.test_size, random_state=self.random_state
+                    )
+                    train_loader = DataLoader(
+                        Subset(dataset, train_ids),  # type: ignore
+                        batch_size=self.batch_size,
+                        shuffle=True,
+                        **dataloader_optimization_params,
+                    )
+                    test_loader = DataLoader(
+                        Subset(dataset, test_ids),  # type: ignore
+                        batch_size=self.batch_size,
+                        **dataloader_optimization_params,
+                    )
+
+                else:
+                    train_loader = DataLoader(dataset[:12140], batch_size=self.batch_size, shuffle=True, **dataloader_optimization_params)  # type: ignore
+                    test_loader = DataLoader(dataset[12140:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+
+                return train_loader, test_loader
+
             case DatasetType.HONMA:
                 from data.data_cleaning import HonmaDataset
 
@@ -65,20 +74,23 @@ class DataConfig:
                 self.num_node_features = dataset.num_node_features
                 self.num_edge_features = dataset.num_edge_features
                 self.num_classes = dataset.num_classes
-                self.train_loader = DataLoader(dataset[:12140], batch_size=self.batch_size, shuffle=True, **dataloader_optimization_params)  # type: ignore
-                self.test_loader = DataLoader(dataset[12140:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
 
-    def for_training(self) -> Tuple[DataLoader, DataLoader]:
-        if not self.train_loader:
-            raise ValueError("Train loader not initialized. Call build method first.")
-        if not self.test_loader:
-            raise ValueError("Test loader not initialized. Call build method first.")
-        return self.train_loader, self.test_loader
+                test_ids, train_ids = train_test_split(
+                    range(len(dataset)), test_size=self.test_size, random_state=self.random_state
+                )
+                train_loader = DataLoader(
+                    Subset(dataset, train_ids),  # type: ignore
+                    batch_size=self.batch_size,
+                    shuffle=True,
+                    **dataloader_optimization_params,
+                )
+                test_loader = DataLoader(
+                    Subset(dataset, test_ids),  # type: ignore
+                    batch_size=self.batch_size,
+                    **dataloader_optimization_params,
+                )
 
-    def for_inference(self) -> DataLoader:
-        if not self.test_loader:
-            raise ValueError("Test loader not initialized. Call build method first.")
-        return self.test_loader
+                return train_loader, test_loader
 
-    def str(self) -> str:
+    def __str__(self) -> str:
         return f"{self.dataset_type} dataset"

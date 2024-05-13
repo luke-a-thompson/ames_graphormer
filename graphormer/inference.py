@@ -14,15 +14,16 @@ def inference_model(
     model_config = hparam_config.model_config()
 
     data_config.build()
-    inference_loader = data_config.for_inference()
+    _, inference_loader = data_config.build()
+    del _
+
     assert hparam_config.batch_size is not None
     assert data_config.num_node_features is not None
     assert data_config.num_edge_features is not None
 
     device = torch.device(hparam_config.torch_device)
     model = (
-        model_config.with_num_layers(hparam_config.num_layers)
-        .with_node_feature_dim(data_config.num_node_features)
+        model_config.with_node_feature_dim(data_config.num_node_features)
         .with_edge_feature_dim(data_config.num_edge_features)
         .with_output_dim(1)
         .build()
