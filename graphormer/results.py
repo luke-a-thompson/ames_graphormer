@@ -29,7 +29,6 @@ def plot_calibration_curve(df: pd.DataFrame, mc_dropout: bool = True):
                 line.remove()
 
         ax.fill_between(ci_x, upper_ci_y, lower_ci_y, color="gray", alpha=0.2)
-        upper_ci_line, lower_ci_line
 
     plt.savefig("results/calibration_curve.png")
 

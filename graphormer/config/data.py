@@ -25,7 +25,7 @@ class DataConfig:
         self.test_size = test_size
         return self
 
-    def build(self) -> None:
+    def build(self) -> Tuple[DataLoader, DataLoader]:
         dataloader_optimization_params = {
             "pin_memory": True,
             "num_workers": 4,

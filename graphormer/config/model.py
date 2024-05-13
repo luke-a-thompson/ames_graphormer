@@ -1,5 +1,4 @@
 from typing import Dict, Self
-import torch.nn as nn
 from graphormer.model import Graphormer
 
 
@@ -76,7 +75,7 @@ class ModelConfig:
         self.state_dict = state_dict
         return self
 
-    def build(self) -> nn.Module:
+    def build(self) -> Graphormer:
         if self.num_layers is None:
             raise AttributeError("num_layers is not defined for Graphormer")
         if self.node_feature_dim is None:

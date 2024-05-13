@@ -11,8 +11,8 @@ import pandas as pd
 
 def inference_model(
     hparam_config: HyperparameterConfig,
-    inference_loader: DataLoader = None,
-    data_config: DataConfig = None,
+    inference_loader: Optional[DataLoader] = None,
+    data_config: Optional[DataConfig] = None,
     mc_samples: Optional[int] = None,
 ):
     if data_config is None:
@@ -21,7 +21,6 @@ def inference_model(
 
     mc_dropout = mc_samples is not None
 
-    data_config.build()
     _, inference_loader = data_config.build()
     del _
 
@@ -104,8 +103,8 @@ def inference_model(
 
                 sample_idx += 1
 
-        results_df = pd.DataFrame(results)
-        results_df.to_pickle(f"{hparam_config.datadir}/results/preds.pkl")
-        print(f"MC Dropout predictions saved to {hparam_config.datadir}/results/preds.pkl")
+    results_df = pd.DataFrame(results)
+    results_df.to_pickle(f"{hparam_config.datadir}/results/preds.pkl")
+    print(f"MC Dropout predictions saved to {hparam_config.datadir}/results/preds.pkl")
 
-        return results_df
+    return results_df
