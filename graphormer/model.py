@@ -79,6 +79,12 @@ class Graphormer(nn.Module):
         self.out_lin = nn.Linear(self.hidden_dim, self.output_dim)
         self.apply(Graphormer._init_weights)
 
+    def enable_dropout(self):
+        """Function to enable the dropout layers during test-time"""
+        for m in self.modules():
+            if m.__class__.__name__.startswith("Dropout"):
+                m.train()
+
     @classmethod
     def _init_weights(cls, m: nn.Module):
         if isinstance(m, nn.Linear):

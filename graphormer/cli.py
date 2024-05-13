@@ -187,17 +187,18 @@ def tune(**kwargs):
 @click.option("--dataset", type=click.Choice(DatasetType, case_sensitive=False), default=DatasetType.HONMA)
 @click.option("--name", default=None)
 @click.option("--checkpoint_dir", default="pretrained_models")
+@click.option("--mc_dropout", default=False)
 @click.option("--max_path_distance", default=5)
 @click.option("--rescale", default=False)
 @click.option("--test_size", default=0.2)
 @click.option("--random_state", default=42)
 @click.option("--batch_size", default=4)
 @click.option("--torch_device", default="cuda")
-def inference(**kwargs) -> torch.Tensor:
+def inference(mc_dropout: bool, **kwargs) -> torch.Tensor:
     hparam_config = HyperparameterConfig(**kwargs)
     hparam_config.load_for_inference()
     print(hparam_config)
     torch.manual_seed(hparam_config.random_state)
-    results = inference_model(hparam_config)
+    results = inference_model(hparam_config, mc_dropout=mc_dropout)
 
     return results

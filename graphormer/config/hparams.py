@@ -322,7 +322,7 @@ class HyperparameterConfig:
 
         checkpoint_path = f"{self.checkpoint_dir}/{self.name}.pt"
         if not os.path.exists(checkpoint_path):
-            raise ValueError(f"Checkpoint {self.checkpoint_path} does not exist - Inference requires a trained model")
+            raise ValueError(f"Checkpoint {checkpoint_path} does not exist - Inference requires a trained model")
         checkpoint = torch.load(checkpoint_path, map_location=device)
 
         hparams: Dict[str, Any] = checkpoint["hyperparameters"]

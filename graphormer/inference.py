@@ -1,13 +1,21 @@
 import torch
+from typing import Optional
 from graphormer.config.hparams import HyperparameterConfig
 from torch_geometric.loader import DataLoader
 from graphormer.config.data import DataConfig
+from graphormer.model import Graphormer
 from graphormer.config.utils import model_init_print
 from sklearn.metrics import balanced_accuracy_score
+from tqdm import tqdm
+import pandas as pd
 
 
 def inference_model(
-    hparam_config: HyperparameterConfig, inference_loader: DataLoader = None, data_config: DataConfig = None
+    hparam_config: HyperparameterConfig,
+    inference_loader: DataLoader = None,
+    data_config: DataConfig = None,
+    mc_dropout: bool = False,
+    mc_samples: Optional[int] = 10,
 ):
     if data_config is None:
         data_config = hparam_config.data_config()
@@ -22,7 +30,7 @@ def inference_model(
     assert data_config.num_edge_features is not None
 
     device = torch.device(hparam_config.torch_device)
-    model = (
+    model: Graphormer = (
         model_config.with_node_feature_dim(data_config.num_node_features)
         .with_edge_feature_dim(data_config.num_edge_features)
         .with_output_dim(1)
@@ -36,25 +44,60 @@ def inference_model(
     all_eval_preds = []
 
     model.eval()
-    for batch in inference_loader:
-        batch.to(device)
-        y = batch.y.to(device)
-        with torch.no_grad():
-            output = model(
-                batch.x,
-                batch.edge_index,
-                batch.edge_attr,
-                batch.ptr,
-                batch.node_paths,
-                batch.edge_paths,
-            )
+    if mc_dropout:
+        mc_dict = {}
 
-        eval_preds = torch.round(torch.sigmoid(output)).tolist()
-        eval_labels = y.cpu().numpy()
+        model.enable_dropout()
+        for mc_sample in tqdm(range(mc_samples), desc="MC Dropout Inference", unit="sample"):
+            for batch_idx, batch in enumerate(inference_loader):
+                sample_idx: int = batch_idx * hparam_config.batch_size
 
-    all_eval_preds.extend(eval_preds)
-    all_eval_labels.extend(eval_labels)
+                batch.to(device)
+                y = batch.y.to(device)
+                with torch.no_grad():
+                    output = model(
+                        batch.x,
+                        batch.edge_index,
+                        batch.edge_attr,
+                        batch.ptr,
+                        batch.node_paths,
+                        batch.edge_paths,
+                    )
 
-    bac = balanced_accuracy_score(all_eval_labels, all_eval_preds)
+                batch_eval_preds = torch.sigmoid(output).tolist()
+                batch_eval_labels = y.cpu().numpy()
 
-    print(f"Inference balanced accuracy: {bac:.3f}")
+                for pred, label in zip(batch_eval_preds, batch_eval_labels):
+                    if sample_idx not in mc_dict:
+                        mc_dict[sample_idx] = {"preds": [], "label": label}
+
+                    mc_dict[sample_idx]["preds"].append(pred)
+
+                    sample_idx += 1
+
+        pd.DataFrame(mc_dict).to_pickle(f"{hparam_config.datadir}/results/mc_dropout_preds.pkl")
+        print(f"MC Dropout predictions saved to {hparam_config.datadir}/results/mc_dropout_preds.pkl")
+
+    else:
+        for batch in inference_loader:
+            batch.to(device)
+            y = batch.y.to(device)
+            with torch.no_grad():
+                output = model(
+                    batch.x,
+                    batch.edge_index,
+                    batch.edge_attr,
+                    batch.ptr,
+                    batch.node_paths,
+                    batch.edge_paths,
+                )
+
+            eval_preds = torch.round(torch.sigmoid(output)).tolist()
+            eval_labels = y.cpu().numpy()
+
+            all_eval_preds.extend(eval_preds)
+            all_eval_labels.extend(eval_labels)
+
+        bac = balanced_accuracy_score(all_eval_labels, all_eval_preds)
+
+        print(f"Inference balanced accuracy: {bac:.3f}")
