@@ -154,6 +154,8 @@ def train(**kwargs):
 @click.option("--tune_size", default=0.25)
 def tune(**kwargs):
     hparam_config = TuningHyperparameterConfig(**kwargs)
+    data_config = hparam_config.data_config()
+    train_loader, test_loader = data_config.build()
     study = optuna.create_study(
         direction="minimize",
         study_name=hparam_config.study_name, 
@@ -164,7 +166,7 @@ def tune(**kwargs):
     )
     def objective(trial: Trial) -> float:
         trial_hparams = hparam_config.create_hyperparameters(trial)
-        return train_model(trial_hparams, trial)
+        return train_model(trial_hparams, trial, train_loader, test_loader, data_config)
     study.optimize(objective, n_trials=hparam_config.n_trials)
     print(f"Best value: {study.best_value} (params: {study.best_params})")
 

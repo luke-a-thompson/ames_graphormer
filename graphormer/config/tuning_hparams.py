@@ -1,5 +1,6 @@
 from typing import Optional
 from random import random
+from graphormer.config.data import DataConfig
 from graphormer.config.hparams import HyperparameterConfig
 from graphormer.config.options import DatasetType, LossReductionType, OptimizerType, SchedulerType
 from optuna.trial import Trial
@@ -339,3 +340,20 @@ class TuningHyperparameterConfig:
             checkpt_save_interval=1000,
             write_to_disk=False,
         )
+
+    def data_config(self) -> DataConfig:
+        if self.dataset is None:
+            raise AttributeError("dataset not defined for DataConfig")
+        if self.batch_size is None:
+            raise AttributeError("batch_size not defined for DataConfig")
+        if self.datadir is None:
+            raise AttributeError("datadir not defined for DataConfig")
+        if self.max_path_distance is None:
+            raise AttributeError("max_path_distance not defined for DataConfig")
+ 
+        config = DataConfig(self.dataset, self.batch_size, self.datadir, self.max_path_distance)
+
+        if self.test_size is not None:
+            config = config.with_test_size(self.test_size)
+        return config
+

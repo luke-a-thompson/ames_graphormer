@@ -4,7 +4,9 @@ import torch
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from torch.optim.lr_scheduler import PolynomialLR, ReduceLROnPlateau
+from torch_geometric.loader import DataLoader
 from graphormer.cli import LossReductionType
+from graphormer.config.data import DataConfig
 from graphormer.schedulers import GreedyLR
 from graphormer.config.utils import calculate_pos_weight, model_init_print, save_checkpoint
 from graphormer.config.hparams import HyperparameterConfig
@@ -14,9 +16,13 @@ from optuna.trial import Trial
 def train_model(
         hparam_config: HyperparameterConfig,
         trial: Optional[Trial] = None,
+        train_loader: Optional[DataLoader] = None,
+        test_loader: Optional[DataLoader] = None,
+        data_config: Optional[DataConfig] = None,
     ):
     logging_config = hparam_config.logging_config()
-    data_config = hparam_config.data_config()
+    if data_config is None:
+        data_config = hparam_config.data_config()
     model_config = hparam_config.model_config()
     loss_config = hparam_config.loss_config()
     optimizer_config = hparam_config.optimizer_config()
@@ -24,7 +30,8 @@ def train_model(
     assert hparam_config.batch_size is not None
 
     writer = logging_config.build()
-    train_loader, test_loader = data_config.build()
+    if train_loader is None or test_loader is None:
+        train_loader, test_loader = data_config.build()
     assert data_config.num_node_features is not None
     assert data_config.num_edge_features is not None
     device = torch.device(hparam_config.torch_device)
