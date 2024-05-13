@@ -35,8 +35,7 @@ class TuningHyperparameterConfig:
         max_dropout: Optional[float] = None,
         min_dropout: Optional[float] = None,
         # Optimizer Parameters
-        max_lr: Optional[float] = None,
-        min_lr: Optional[float] = None,
+        lr: Optional[float] = None,
         max_b1: Optional[float] = None,
         min_b1: Optional[float] = None,
         max_b2: Optional[float] = None,
@@ -103,8 +102,7 @@ class TuningHyperparameterConfig:
         self.min_dropout = min_dropout
 
         # Optimizer Parameters
-        self.max_lr = max_lr
-        self.min_lr = min_lr
+        self.lr = lr
         self.max_b1 = max_b1
         self.min_b1 = min_b1
         self.max_b2 = max_b2
@@ -154,10 +152,8 @@ class TuningHyperparameterConfig:
             raise AttributeError("min_dropout not defined for TuningHyperparameterConfig")
         if self.max_dropout is None:
             raise AttributeError("max_dropout not defined for TuningHyperparameterConfig")
-        if self.min_lr is None:
+        if self.lr is None:
             raise AttributeError("min_lr not defined for TuningHyperparameterConfig")
-        if self.max_lr is None:
-            raise AttributeError("max_lr not defined for TuningHyperparameterConfig")
         if self.min_b1 is None:
             raise AttributeError("min_b1 not defined for TuningHyperparameterConfig")
         if self.max_b1 is None:
@@ -314,7 +310,7 @@ class TuningHyperparameterConfig:
             batch_size=self.batch_size,
             # Optimizer Parameters
             optimizer_type=optimizer_type,
-            lr=trial.suggest_float("lr", self.min_lr, self.max_lr),
+            lr=self.lr,
             b1=b1,
             b2=b2,
             weight_decay=trial.suggest_float("weight_decay", self.min_weight_decay, self.max_weight_decay),
