@@ -1,18 +1,18 @@
 import click
 import tomllib
+from typing import Optional
 from optuna.pruners import HyperbandPruner
 from optuna.samplers import TPESampler
 from optuna.trial import Trial
 import torch
-from torch_geometric.loader import DataLoader
 import optuna
 
 from graphormer.config.hparams import HyperparameterConfig
 from graphormer.config.options import LossReductionType, OptimizerType, SchedulerType, DatasetType
 from graphormer.config.tuning_hparams import TuningHyperparameterConfig
-from graphormer.model import Graphormer
 from graphormer.train import train_model
 from graphormer.inference import inference_model
+from graphormer.results import plot_calibration_curve
 
 
 def configure(ctx, param, filename):
@@ -187,18 +187,18 @@ def tune(**kwargs):
 @click.option("--dataset", type=click.Choice(DatasetType, case_sensitive=False), default=DatasetType.HONMA)
 @click.option("--name", default=None)
 @click.option("--checkpoint_dir", default="pretrained_models")
-@click.option("--mc_dropout", default=False)
+@click.option("--mc_samples", default=None, type=click.INT)
 @click.option("--max_path_distance", default=5)
 @click.option("--rescale", default=False)
 @click.option("--test_size", default=0.2)
 @click.option("--random_state", default=42)
 @click.option("--batch_size", default=4)
 @click.option("--torch_device", default="cuda")
-def inference(mc_dropout: bool, **kwargs) -> torch.Tensor:
+def inference(mc_samples: Optional[int], **kwargs) -> torch.Tensor:
     hparam_config = HyperparameterConfig(**kwargs)
     hparam_config.load_for_inference()
     print(hparam_config)
     torch.manual_seed(hparam_config.random_state)
-    results = inference_model(hparam_config, mc_dropout=mc_dropout)
+    results = inference_model(hparam_config, mc_samples=mc_samples)
 
-    return results
+    plot_calibration_curve(results)

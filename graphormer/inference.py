@@ -5,7 +5,6 @@ from torch_geometric.loader import DataLoader
 from graphormer.config.data import DataConfig
 from graphormer.model import Graphormer
 from graphormer.config.utils import model_init_print
-from sklearn.metrics import balanced_accuracy_score
 from tqdm import tqdm
 import pandas as pd
 
@@ -14,12 +13,13 @@ def inference_model(
     hparam_config: HyperparameterConfig,
     inference_loader: DataLoader = None,
     data_config: DataConfig = None,
-    mc_dropout: bool = False,
-    mc_samples: Optional[int] = 10,
+    mc_samples: Optional[int] = None,
 ):
     if data_config is None:
         data_config = hparam_config.data_config()
     model_config = hparam_config.model_config()
+
+    mc_dropout = mc_samples is not None
 
     data_config.build()
     _, inference_loader = data_config.build()
@@ -40,15 +40,13 @@ def inference_model(
 
     model_init_print(hparam_config, model, test_dataloader=inference_loader)
 
-    all_eval_labels = []
-    all_eval_preds = []
+    results = {}
 
     model.eval()
     if mc_dropout:
-        mc_dict = {}
 
         model.enable_dropout()
-        for mc_sample in tqdm(range(mc_samples), desc="MC Dropout Inference", unit="sample"):
+        for mc_sample in tqdm(range(mc_samples), desc="MC Dropout Inference", unit="mc_sample"):
             for batch_idx, batch in enumerate(inference_loader):
                 sample_idx: int = batch_idx * hparam_config.batch_size
 
@@ -68,36 +66,46 @@ def inference_model(
                 batch_eval_labels = y.cpu().numpy()
 
                 for pred, label in zip(batch_eval_preds, batch_eval_labels):
-                    if sample_idx not in mc_dict:
-                        mc_dict[sample_idx] = {"preds": [], "label": label}
+                    if sample_idx not in results:
+                        results[sample_idx] = {"preds": [], "label": label}
 
-                    mc_dict[sample_idx]["preds"].append(pred)
+                    results[sample_idx]["preds"].append(pred)
 
                     sample_idx += 1
 
-        pd.DataFrame(mc_dict).to_pickle(f"{hparam_config.datadir}/results/mc_dropout_preds.pkl")
+        results_df = pd.DataFrame(results)
+        results_df.to_pickle(f"{hparam_config.datadir}/results/mc_dropout_preds.pkl")
         print(f"MC Dropout predictions saved to {hparam_config.datadir}/results/mc_dropout_preds.pkl")
 
-    else:
-        for batch in inference_loader:
-            batch.to(device)
-            y = batch.y.to(device)
-            with torch.no_grad():
-                output = model(
-                    batch.x,
-                    batch.edge_index,
-                    batch.edge_attr,
-                    batch.ptr,
-                    batch.node_paths,
-                    batch.edge_paths,
-                )
+        return results_df
 
-            eval_preds = torch.round(torch.sigmoid(output)).tolist()
-            eval_labels = y.cpu().numpy()
+    for batch_idx, batch in enumerate(inference_loader):
+        sample_idx: int = batch_idx * hparam_config.batch_size
+        batch.to(device)
+        y = batch.y.to(device)
+        with torch.no_grad():
+            output = model(
+                batch.x,
+                batch.edge_index,
+                batch.edge_attr,
+                batch.ptr,
+                batch.node_paths,
+                batch.edge_paths,
+            )
 
-            all_eval_preds.extend(eval_preds)
-            all_eval_labels.extend(eval_labels)
+            batch_eval_preds = torch.sigmoid(output).tolist()
+            batch_eval_labels = y.cpu().numpy()
 
-        bac = balanced_accuracy_score(all_eval_labels, all_eval_preds)
+            for pred, label in zip(batch_eval_preds, batch_eval_labels):
+                if sample_idx not in results:
+                    results[sample_idx] = {"preds": [], "label": label}
 
-        print(f"Inference balanced accuracy: {bac:.3f}")
+                results[sample_idx]["preds"].append(pred)
+
+                sample_idx += 1
+
+        results_df = pd.DataFrame(results)
+        results_df.to_pickle(f"{hparam_config.datadir}/results/preds.pkl")
+        print(f"MC Dropout predictions saved to {hparam_config.datadir}/results/preds.pkl")
+
+        return results_df

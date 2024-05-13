@@ -173,3 +173,4 @@ cython_debug/
 hparams/*
 *.sqlite3
 **/**/*.pkl
+**/**/*.png
