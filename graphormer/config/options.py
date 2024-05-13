@@ -5,6 +5,7 @@ class SchedulerType(str, Enum):
     GREEDY = "greedy"
     POLYNOMIAL = "polynomial"
     PLATEAU = "plateau"
+    FIXED = "fixed"
 
 
 class OptimizerType(str, Enum):

@@ -152,6 +152,13 @@ def train(**kwargs):
 @click.option("--min_dropout", default=0.0)
 @click.option("--max_dropout", default=0.5)
 @click.option("--tune_size", default=0.25)
+@click.option("--optimizer_type", type=click.Choice(OptimizerType, case_sensitive=False), default=None) # type: ignore
+@click.option(
+    "--scheduler_type",
+    type=click.Choice(SchedulerType, case_sensitive=False), # type: ignore
+    default=None,
+)
+@click.option("--loss_reduction_type", type=click.Choice(LossReductionType, case_sensitive=False), default=None) #type: ignore
 def tune(**kwargs):
     hparam_config = TuningHyperparameterConfig(**kwargs)
     data_config = hparam_config.data_config()

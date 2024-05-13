@@ -1,6 +1,6 @@
 from typing import Dict, Self
 from graphormer.config.options import SchedulerType, LossReductionType
-from torch.optim.lr_scheduler import LRScheduler, PolynomialLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import ConstantLR, LRScheduler, PolynomialLR, ReduceLROnPlateau
 from torch.optim import Optimizer
 from graphormer.schedulers import GreedyLR
 
@@ -82,6 +82,8 @@ class SchedulerConfig:
 
     def build(self, optimizer: Optimizer) -> LRScheduler:
         match self.scheduler_type:
+            case SchedulerType.FIXED:
+                return ConstantLR(optimizer, total_iters=10000000)
             case SchedulerType.POLYNOMIAL:
                 if self.total_iters is None:
                     raise AttributeError("Total Iters not defined for PolynomialLR scheduler")

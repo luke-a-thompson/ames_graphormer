@@ -36,6 +36,8 @@ class TuningHyperparameterConfig:
         max_dropout: Optional[float] = None,
         min_dropout: Optional[float] = None,
         # Optimizer Parameters
+        optimizer_type: Optional[OptimizerType] = None,
+        loss_reduction_type: Optional[LossReductionType] = None,
         lr: Optional[float] = None,
         max_b1: Optional[float] = None,
         min_b1: Optional[float] = None,
@@ -52,6 +54,7 @@ class TuningHyperparameterConfig:
         max_dampening: Optional[float] = None,
         min_dampening: Optional[float] = None,
         # Scheduler Parameters
+        scheduler_type: Optional[SchedulerType] = None,
         max_lr_power: Optional[float] = None,
         min_lr_power: Optional[float] = None,
         max_lr_patience: Optional[int] = None,
@@ -103,6 +106,8 @@ class TuningHyperparameterConfig:
         self.min_dropout = min_dropout
 
         # Optimizer Parameters
+        self.optimizer_type = optimizer_type
+        self.loss_reduction_type = loss_reduction_type
         self.lr = lr
         self.max_b1 = max_b1
         self.min_b1 = min_b1
@@ -120,6 +125,7 @@ class TuningHyperparameterConfig:
         self.min_dampening = min_dampening
 
         # Scheduler Parameters
+        self.scheduler_type = scheduler_type
         self.max_lr_power = max_lr_power
         self.min_lr_power = min_lr_power
         self.max_lr_patience = max_lr_patience
@@ -224,17 +230,26 @@ class TuningHyperparameterConfig:
         if self.tune_size is None:
             raise AttributeError("tune_size not defined for TuningHyperparameterConfig")
 
-        optimizer_type = OptimizerType(
-            trial.suggest_categorical("optimizer_type", [OptimizerType.SGD, OptimizerType.ADAMW])
-        )
-        scheduler_type = SchedulerType(
-            trial.suggest_categorical(
-                "scheduler_type", [SchedulerType.GREEDY, SchedulerType.POLYNOMIAL, SchedulerType.PLATEAU]
+        if self.optimizer_type is None:
+            optimizer_type = OptimizerType(
+                trial.suggest_categorical("optimizer_type", [OptimizerType.SGD, OptimizerType.ADAMW])
             )
-        )
-        loss_reduction_type = LossReductionType(
-            trial.suggest_categorical("loss_reduction", [LossReductionType.MEAN, LossReductionType.SUM])
-        )
+        else:
+            optimizer_type = self.optimizer_type
+        if self.scheduler_type is None:
+            scheduler_type = SchedulerType(
+                trial.suggest_categorical(
+                    "scheduler_type", [SchedulerType.GREEDY, SchedulerType.POLYNOMIAL, SchedulerType.PLATEAU]
+                )
+            )
+        else:
+            scheduler_type = self.scheduler_type
+        if self.loss_reduction_type is None:
+            loss_reduction_type = LossReductionType(
+                trial.suggest_categorical("loss_reduction", [LossReductionType.MEAN, LossReductionType.SUM])
+            )
+        else:
+            loss_reduction_type = self.loss_reduction_type
 
         nesterov = None
         momentum = None
@@ -350,7 +365,7 @@ class TuningHyperparameterConfig:
             raise AttributeError("datadir not defined for DataConfig")
         if self.max_path_distance is None:
             raise AttributeError("max_path_distance not defined for DataConfig")
- 
+
         config = DataConfig(self.dataset, self.batch_size, self.datadir, self.max_path_distance)
 
         if self.test_size is not None:
