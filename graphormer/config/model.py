@@ -18,6 +18,7 @@ class ModelConfig:
         self.max_path_distance = None
         self.dropout = None
         self.state_dict = None
+        self.rescale = None
 
     def with_num_layers(self, num_layers: int) -> Self:
         self.num_layers = num_layers
@@ -67,6 +68,10 @@ class ModelConfig:
         self.dropout = dropout
         return self
 
+    def with_rescale(self, rescale: bool) -> Self:
+        self.rescale = rescale
+        return self
+
     def with_state_dict(self, state_dict: Dict) -> Self:
         self.state_dict = state_dict
         return self
@@ -96,6 +101,8 @@ class ModelConfig:
             raise AttributeError("max_path_distance is not defined for Graphormer")
         if self.dropout is None:
             raise AttributeError("dropout is not defined for Graphormer")
+        if self.rescale is None:
+            raise AttributeError("rescale is not defined for Graphormer")
 
         model = Graphormer(
             num_layers=self.num_layers,
@@ -109,7 +116,8 @@ class ModelConfig:
             max_in_degree=self.max_in_degree,
             max_out_degree=self.max_out_degree,
             max_path_distance=self.max_path_distance,
-            dropout=self.dropout
+            dropout=self.dropout,
+            rescale=self.rescale,
         )
 
         if self.state_dict is not None:

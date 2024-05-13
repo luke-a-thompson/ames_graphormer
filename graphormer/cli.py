@@ -79,6 +79,7 @@ def configure(ctx, param, filename):
 @click.option("--loss_reduction", type=click.Choice(LossReductionType, case_sensitive=False), default=LossReductionType.MEAN)  # type: ignore
 @click.option("--checkpoint_dir", default="pretrained_models")
 @click.option("--dropout", default=0.05)
+@click.option("--rescale", default=False)
 def train(**kwargs):
     hparam_config = HyperparameterConfig(**kwargs)
     hparam_config.load_from_checkpoint()
@@ -151,6 +152,7 @@ def train(**kwargs):
 @click.option("--checkpoint_dir", default="optuna_models")
 @click.option("--min_dropout", default=0.0)
 @click.option("--max_dropout", default=0.5)
+@click.option("--rescale", default=False)
 @click.option("--tune_size", default=0.25)
 @click.option("--optimizer_type", type=click.Choice(OptimizerType, case_sensitive=False), default=None)  # type: ignore
 @click.option(
@@ -186,6 +188,7 @@ def tune(**kwargs):
 @click.option("--name", default=None)
 @click.option("--checkpoint_dir", default="pretrained_models")
 @click.option("--max_path_distance", default=5)
+@click.option("--rescale", default=False)
 @click.option("--test_size", default=0.2)
 @click.option("--random_state", default=42)
 @click.option("--batch_size", default=4)
