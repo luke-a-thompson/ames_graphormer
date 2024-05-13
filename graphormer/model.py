@@ -20,6 +20,7 @@ class Graphormer(nn.Module):
         max_out_degree: int,
         max_path_distance: int,
         dropout: float = 0.05,
+        rescale: bool = False,
     ):
         """
         :param num_layers: number of Graphormer layers
@@ -68,7 +69,8 @@ class Graphormer(nn.Module):
                     hidden_dim=self.hidden_dim,
                     n_heads=self.n_heads,
                     ffn_dim=self.ffn_hidden_dim,
-                    ffn_dropout=dropout
+                    ffn_dropout=dropout,
+                    rescale=rescale,
                 )
                 for _ in range(self.num_layers)
             ]
@@ -150,11 +152,15 @@ class Graphormer(nn.Module):
             subgraphs.append(subgraph)
 
             spatial_subgraph = torch.zeros((max_size, max_size))
-            spatial_subgraph[:subgraph_size, :subgraph_size] = spatial_encoding[idx_sq_range[0] : idx_sq_range[1]].reshape(subgraph_size, subgraph_size)
+            spatial_subgraph[:subgraph_size, :subgraph_size] = spatial_encoding[
+                idx_sq_range[0] : idx_sq_range[1]
+            ].reshape(subgraph_size, subgraph_size)
             spatial_subgraphs.append(spatial_subgraph.unsqueeze(0))
 
             edge_subgraph = torch.zeros((max_size, max_size))
-            edge_subgraph[:subgraph_size, :subgraph_size] = edge_encoding[idx_sq_range[0] : idx_sq_range[1]].reshape(subgraph_size, subgraph_size)
+            edge_subgraph[:subgraph_size, :subgraph_size] = edge_encoding[idx_sq_range[0] : idx_sq_range[1]].reshape(
+                subgraph_size, subgraph_size
+            )
             edge_subgraphs.append(edge_subgraph.unsqueeze(0))
 
         x = rnn.pad_sequence(subgraphs, batch_first=True)

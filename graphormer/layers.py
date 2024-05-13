@@ -202,7 +202,7 @@ class GraphormerMultiHeadAttention(nn.Module):
 
 
 class GraphormerEncoderLayer(nn.Module):
-    def __init__(self, hidden_dim: int, n_heads: int, ffn_dim=80, ffn_dropout=0.1):
+    def __init__(self, hidden_dim: int, n_heads: int, ffn_dim=80, ffn_dropout=0.1, rescale: bool = False):
         """
         :param hidden_dim: node feature matrix input number of dimension
         :param edge_dim: edge feature matrix input number of dimension
@@ -210,6 +210,7 @@ class GraphormerEncoderLayer(nn.Module):
         """
         super().__init__()
 
+        self.rescale = rescale
         self.hidden_dim = hidden_dim
         self.n_heads = n_heads
 
@@ -217,6 +218,11 @@ class GraphormerEncoderLayer(nn.Module):
             num_heads=n_heads,
             hidden_dim=hidden_dim,
         )
+
+        if not rescale:
+            self.ln1 = nn.LayerNorm(hidden_dim)
+            self.ln2 = nn.LayerNorm(hidden_dim)
+
         self.ffn = FeedForwardNetwork(hidden_dim, ffn_dim, hidden_dim, ffn_dropout)
 
     def forward(
@@ -243,11 +249,17 @@ class GraphormerEncoderLayer(nn.Module):
         :param edge_encoding: encoding of the edges
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
-        att_input = rescale(x)
+        if self.rescale:
+            att_input = rescale(x)
+        else:
+            att_input = self.ln1(x)
         att_output = self.attention(att_input, spatial_encoding, edge_encoding) + x
         pad_mask = torch.any(att_output == 0, dim=-1)
 
-        ffn_input = rescale(x)
+        if self.rescale:
+            ffn_input = rescale(x)
+        else:
+            ffn_input = self.ln2(x)
         ffn_output = self.ffn(ffn_input) + att_output
         ffn_output[pad_mask] = 0
 
