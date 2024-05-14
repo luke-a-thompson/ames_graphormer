@@ -2,7 +2,7 @@ from typing import Optional
 from random import random
 from graphormer.config.data import DataConfig
 from graphormer.config.hparams import HyperparameterConfig
-from graphormer.config.options import DatasetType, LossReductionType, OptimizerType, SchedulerType
+from graphormer.config.options import DatasetType, LossReductionType, OptimizerType, SchedulerType, NormType
 from optuna.trial import Trial
 
 
@@ -35,6 +35,7 @@ class TuningHyperparameterConfig:
         output_dim: Optional[int] = None,
         max_dropout: Optional[float] = None,
         min_dropout: Optional[float] = None,
+        norm_type: Optional[NormType] = None,
         # Optimizer Parameters
         optimizer_type: Optional[OptimizerType] = None,
         loss_reduction_type: Optional[LossReductionType] = None,
@@ -104,6 +105,7 @@ class TuningHyperparameterConfig:
         self.output_dim = output_dim
         self.max_dropout = max_dropout
         self.min_dropout = min_dropout
+        self.norm_type = norm_type
 
         # Optimizer Parameters
         self.optimizer_type = optimizer_type
@@ -251,6 +253,12 @@ class TuningHyperparameterConfig:
         else:
             loss_reduction_type = self.loss_reduction_type
 
+        norm_type = self.norm_type
+        if norm_type is None:
+            norm_type = NormType(
+                trial.suggest_categorical("norm_type", [NormType.LAYER, NormType.MAX, NormType.RMS, NormType.CRMS])
+            )
+
         nesterov = None
         momentum = None
         dampening = None
@@ -264,7 +272,7 @@ class TuningHyperparameterConfig:
                 momentum = trial.suggest_float("momentum", self.min_momentum, self.max_momentum)
                 dampening = 0.0
                 if not nesterov:
-                    dampening=trial.suggest_float("dampening", self.min_dampening, self.max_dampening)
+                    dampening = trial.suggest_float("dampening", self.min_dampening, self.max_dampening)
             case OptimizerType.ADAMW:
                 b1 = trial.suggest_float("b1", self.min_b1, self.max_b1)
                 b2 = trial.suggest_float("b2", self.min_b2, self.max_b2)
@@ -300,7 +308,6 @@ class TuningHyperparameterConfig:
             case SchedulerType.POLYNOMIAL:
                 lr_power = trial.suggest_float("lr_power", self.min_lr_power, self.max_lr_power)
 
-
         return HyperparameterConfig(
             datadir=self.datadir,
             dataset=self.dataset,
@@ -324,6 +331,7 @@ class TuningHyperparameterConfig:
             output_dim=self.output_dim,
             dropout=trial.suggest_float("dropout", self.min_dropout, self.max_dropout),
             batch_size=self.batch_size,
+            norm_type=norm_type,
             # Optimizer Parameters
             optimizer_type=optimizer_type,
             lr=self.lr,
@@ -371,4 +379,3 @@ class TuningHyperparameterConfig:
         if self.test_size is not None:
             config = config.with_test_size(self.test_size)
         return config
-

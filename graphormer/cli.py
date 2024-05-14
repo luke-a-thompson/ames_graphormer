@@ -8,7 +8,7 @@ import torch
 import optuna
 
 from graphormer.config.hparams import HyperparameterConfig
-from graphormer.config.options import LossReductionType, OptimizerType, SchedulerType, DatasetType
+from graphormer.config.options import LossReductionType, NormType, OptimizerType, SchedulerType, DatasetType
 from graphormer.config.tuning_hparams import TuningHyperparameterConfig
 from graphormer.train import train_model
 from graphormer.inference import inference_model
@@ -79,7 +79,7 @@ def configure(ctx, param, filename):
 @click.option("--loss_reduction", type=click.Choice(LossReductionType, case_sensitive=False), default=LossReductionType.MEAN)  # type: ignore
 @click.option("--checkpoint_dir", default="pretrained_models")
 @click.option("--dropout", default=0.05)
-@click.option("--rescale", default=False)
+@click.option("--norm_type", type=click.Choice(NormType, case_sensitive=False), default=NormType.LAYER)  # type: ignore
 def train(**kwargs):
     hparam_config = HyperparameterConfig(**kwargs)
     hparam_config.load_from_checkpoint()
@@ -152,8 +152,9 @@ def train(**kwargs):
 @click.option("--checkpoint_dir", default="optuna_models")
 @click.option("--min_dropout", default=0.0)
 @click.option("--max_dropout", default=0.5)
-@click.option("--rescale", default=False)
+@click.option("--norm_type", type=click.Choice(NormType, case_sensitive=False), default=None)  # type: ignore
 @click.option("--tune_size", default=0.25)
+@click.option("--n_trials", default=10000)
 @click.option("--optimizer_type", type=click.Choice(OptimizerType, case_sensitive=False), default=None)  # type: ignore
 @click.option(
     "--scheduler_type",
@@ -173,6 +174,95 @@ def tune(**kwargs):
         pruner=HyperbandPruner(),
         load_if_exists=True,
     )
+
+    starting_points = []
+
+    match hparam_config.optimizer_type:
+        case OptimizerType.SGD:
+            starting_points.append(
+                {
+                    "nesterov": False,
+                    "momentum": 0.0,
+                    "dampening": 0.0,
+                    "weight_decay": 0.0,
+                    "dropout": 0.1,
+                    "clip_grad_norm": 5.0,
+                }
+            )
+            starting_points.append(
+                {
+                    "nesterov": False,
+                    "momentum": 0.0,
+                    "dampening": 0.0,
+                    "weight_decay": 0.0001,
+                    "dropout": 0.1,
+                    "clip_grad_norm": 5.0,
+                }
+            )
+            starting_points.append(
+                {
+                    "nesterov": False,
+                    "momentum": 0.9,
+                    "dampening": 0.0,
+                    "weight_decay": 0.0,
+                    "dropout": 0.1,
+                    "clip_grad_norm": 5.0,
+                },
+            )
+            starting_points.append(
+                {
+                    "nesterov": False,
+                    "momentum": 0.9,
+                    "dampening": 0.1,
+                    "weight_decay": 0.0,
+                    "dropout": 0.1,
+                    "clip_grad_norm": 5.0,
+                },
+            )
+            starting_points.append(
+                {
+                    "nesterov": True,
+                    "momentum": 0.9,
+                    "dampening": 0.0,
+                    "weight_decay": 0.0,
+                    "dropout": 0.1,
+                    "clip_grad_norm": 5.0,
+                },
+            )
+            starting_points.append(
+                {
+                    "nesterov": True,
+                    "momentum": 0.9,
+                    "dampening": 0.0,
+                    "weight_decay": 0.0001,
+                    "dropout": 0.1,
+                    "clip_grad_norm": 5.0,
+                },
+            )
+        case OptimizerType.ADAMW:
+            starting_points.append(
+                {
+                    "b1": 0.9,
+                    "b2": 0.999,
+                    "eps": 1e-08,
+                    "weight_decay": 0.0,
+                    "dropout": 0.1,
+                    "clip_grad_norm": 5.0,
+                }
+            )
+            starting_points.append(
+                {
+                    "b1": 0.9,
+                    "b2": 0.999,
+                    "eps": 1e-08,
+                    "weight_decay": 0.01,
+                    "dropout": 0.1,
+                    "clip_grad_norm": 5.0,
+                }
+            )
+
+    for starting_params in starting_points:
+        study.enqueue_trial(starting_params, skip_if_exists=True)
 
     def objective(trial: Trial) -> float:
         trial_hparams = hparam_config.create_hyperparameters(trial)

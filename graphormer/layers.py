@@ -2,7 +2,9 @@ import torch
 from torch import nn
 from torch_geometric.utils import degree
 
+from graphormer.norm import CRMSNorm, MaxNorm, RMSNorm
 from graphormer.utils import decrease_to_max_value
+from graphormer.config.options import NormType
 
 
 class FeedForwardNetwork(nn.Module):
@@ -202,7 +204,9 @@ class GraphormerMultiHeadAttention(nn.Module):
 
 
 class GraphormerEncoderLayer(nn.Module):
-    def __init__(self, hidden_dim: int, n_heads: int, ffn_dim=80, ffn_dropout=0.1, rescale: bool = False):
+    def __init__(
+        self, hidden_dim: int, n_heads: int, ffn_dim=80, ffn_dropout=0.1, norm_type: NormType = NormType.LAYER
+    ):
         """
         :param hidden_dim: node feature matrix input number of dimension
         :param edge_dim: edge feature matrix input number of dimension
@@ -210,7 +214,6 @@ class GraphormerEncoderLayer(nn.Module):
         """
         super().__init__()
 
-        self.rescale = rescale
         self.hidden_dim = hidden_dim
         self.n_heads = n_heads
 
@@ -219,9 +222,22 @@ class GraphormerEncoderLayer(nn.Module):
             hidden_dim=hidden_dim,
         )
 
-        if not rescale:
-            self.ln1 = nn.LayerNorm(hidden_dim)
-            self.ln2 = nn.LayerNorm(hidden_dim)
+        match norm_type:
+            case NormType.LAYER:
+                self.n1 = nn.LayerNorm(hidden_dim)
+                self.n2 = nn.LayerNorm(hidden_dim)
+            case NormType.RMS:
+                self.n1 = RMSNorm(hidden_dim)
+                self.n2 = RMSNorm(hidden_dim)
+            case NormType.CRMS:
+                self.n1 = CRMSNorm(hidden_dim)
+                self.n2 = CRMSNorm(hidden_dim)
+            case NormType.MAX:
+                self.n1 = MaxNorm(hidden_dim)
+                self.n2 = MaxNorm(hidden_dim)
+            case NormType.NONE:
+                self.n1 = nn.Identity()
+                self.n2 = nn.Identity()
 
         self.ffn = FeedForwardNetwork(hidden_dim, ffn_dim, hidden_dim, ffn_dropout)
 
@@ -235,38 +251,26 @@ class GraphormerEncoderLayer(nn.Module):
         Implements forward pass of the Graphormer encoder layer.
 
         The correct sequence for operations with residual connections and layer rescaling is:
-        1. Rescale (RS) is applied to the input.
+        1. Normalization (N) is applied to the input.
         2. The rescaled input is passed to MHA or FFN.
         3. The MHA or FFN output is added to the original input, x (residual connection).
         4. The combined (MHA_out + x) output goes through the ffn.
 
         This results in the following operations:
-        h′(l) = MHA(RS(h(l−1))) + h(l−1)
-        h(l) = FFN(RS(h′(l))) + h′(l)
+        h′(l) = MHA(N(h(l−1))) + h(l−1)
+        h(l) = FFN(N(h′(l))) + h′(l)
 
         :param x: node embedding
         :param spatial_encoding: spatial encoding
         :param edge_encoding: encoding of the edges
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
-        if self.rescale:
-            att_input = rescale(x)
-        else:
-            att_input = self.ln1(x)
+        att_input = self.n1(x)
         att_output = self.attention(att_input, spatial_encoding, edge_encoding) + x
         pad_mask = torch.any(att_output == 0, dim=-1)
 
-        if self.rescale:
-            ffn_input = rescale(x)
-        else:
-            ffn_input = self.ln2(x)
+        ffn_input = self.n2(x)
         ffn_output = self.ffn(ffn_input) + att_output
         ffn_output[pad_mask] = 0
 
         return ffn_output
-
-def rescale(x: torch.Tensor) -> torch.Tensor:
-    max_val = torch.max(torch.abs(x), dim=-1).values.unsqueeze(-1)
-    zero_mask = max_val == 0
-    max_val[zero_mask] = 1
-    return x / max_val

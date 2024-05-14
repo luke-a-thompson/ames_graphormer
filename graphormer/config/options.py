@@ -21,3 +21,11 @@ class DatasetType(str, Enum):
 class LossReductionType(str, Enum):
     SUM = "sum"
     MEAN = "mean"
+
+
+class NormType(str, Enum):
+    NONE = "none"
+    LAYER = "layer"
+    RMS = "rms"
+    CRMS = "crms"
+    MAX = "max"

@@ -9,16 +9,27 @@ from graphormer.config.loss import LossConfig
 from graphormer.config.model import ModelConfig
 from graphormer.config.optimizer import OptimizerConfig
 from graphormer.config.scheduler import SchedulerConfig
-from graphormer.config.options import LossReductionType, DatasetType, SchedulerType, OptimizerType
+from graphormer.config.options import LossReductionType, DatasetType, SchedulerType, OptimizerType, NormType
 
 
 class HyperparameterConfig:
     def __init__(
         self,
+        # Global Parameters
+        name: Optional[str] = None,
+        random_state: int = int(random() * 1e9),
+        torch_device: str = "cuda",
+        # Data Parameters
         datadir: Optional[str] = None,
         dataset: Optional[DatasetType] = None,
         batch_size: Optional[int] = None,
         max_path_distance: Optional[int] = None,
+        node_feature_dim: Optional[int] = None,
+        edge_feature_dim: Optional[int] = None,
+        output_dim: Optional[int] = None,
+        test_size: Optional[float] = None,
+        tune_size: float = 1.0,
+        # Model Parameters
         num_layers: Optional[int] = None,
         hidden_dim: Optional[int] = None,
         edge_embedding_dim: Optional[int] = None,
@@ -26,22 +37,23 @@ class HyperparameterConfig:
         n_heads: Optional[int] = None,
         max_in_degree: Optional[int] = None,
         max_out_degree: Optional[int] = None,
-        output_dim: Optional[int] = None,
-        node_feature_dim: Optional[int] = None,
-        edge_feature_dim: Optional[int] = None,
-        test_size: Optional[float] = None,
-        tune_size: float = 1.0,
-        random_state: int = int(random() * 1e9),
+        dropout: Optional[float] = None,
+        norm_type: Optional[NormType] = None,
+        # Optimizer Parameters
+        optimizer_type: Optional[OptimizerType] = None,
+        momentum: Optional[float] = None,
+        nesterov: Optional[bool] = None,
+        dampening: Optional[float] = None,
         lr: Optional[float] = None,
         b1: Optional[float] = None,
         b2: Optional[float] = None,
         weight_decay: Optional[float] = None,
         eps: Optional[float] = None,
         clip_grad_norm: float = 5.0,
-        torch_device: str = "cuda",
-        epochs: int = 10,
-        lr_power: Optional[float] = None,
+        loss_reduction: Optional[LossReductionType] = None,
+        # Scheduler Parameters
         scheduler_type: Optional[SchedulerType] = None,
+        lr_power: Optional[float] = None,
         lr_patience: Optional[int] = None,
         lr_cooldown: Optional[int] = None,
         lr_min: Optional[float] = None,
@@ -51,14 +63,13 @@ class HyperparameterConfig:
         lr_window: Optional[int] = None,
         lr_reset: Optional[int] = None,
         lr_factor: Optional[float] = None,
-        checkpt_save_interval: int = 1,
+        # Training Parameters
+        start_epoch: int = 0,
+        epochs: int = 10,
         accumulation_steps: Optional[int] = None,
-        loss_reduction: Optional[LossReductionType] = None,
-        name: Optional[str] = None,
-        optimizer_type: Optional[OptimizerType] = None,
-        momentum: Optional[float] = None,
-        nesterov: Optional[bool] = None,
-        dampening: Optional[float] = None,
+        checkpt_save_interval: int = 1,
+        checkpoint_dir: str = "pretrained_models",
+        # Logging Parameters
         logdir: Optional[str] = None,
         flush_secs: Optional[int] = None,
         purge_step: Optional[int] = None,
@@ -66,13 +77,9 @@ class HyperparameterConfig:
         max_queue: Optional[int] = None,
         write_to_disk: Optional[bool] = None,
         filename_suffix: Optional[str] = None,
-        start_epoch: int = 0,
-        checkpoint_dir: str = "pretrained_models",
-        dropout: Optional[float] = None,
-        rescale: Optional[bool] = None,
     ):
         if name is None:
-            name = datetime.datetime.now().strftime("%d-%m-%y")
+            name = f"model_{datetime.datetime.now().strftime("%d-%m-%y-%H-%M")}"
         self.datadir = datadir
         self.dataset = dataset
         self.batch_size = batch_size
@@ -127,7 +134,7 @@ class HyperparameterConfig:
         self.start_epoch = start_epoch
         self.checkpoint_dir = checkpoint_dir
         self.dropout = dropout
-        self.rescale = rescale
+        self.norm_type = norm_type
         self.model_state_dict = None
         self.optimizer_state_dict = None
         self.scheduler_state_dict = None
@@ -178,8 +185,8 @@ class HyperparameterConfig:
             config = config.with_max_path_distance(self.max_path_distance)
         if self.dropout is not None:
             config = config.with_dropout(self.dropout)
-        if self.rescale is not None:
-            config = config.with_rescale(self.rescale)
+        if self.norm_type is not None:
+            config = config.with_norm_type(self.norm_type)
         if self.model_state_dict is not None:
             config = config.with_state_dict(self.model_state_dict)
             self.model_state_dict = None

@@ -3,6 +3,7 @@ import torch.nn.utils.rnn as rnn
 from torch import nn
 
 from graphormer.layers import CentralityEncoding, EdgeEncoding, GraphormerEncoderLayer, SpatialEncoding
+from graphormer.config.options import NormType
 
 
 class Graphormer(nn.Module):
@@ -20,7 +21,7 @@ class Graphormer(nn.Module):
         max_out_degree: int,
         max_path_distance: int,
         dropout: float = 0.05,
-        rescale: bool = False,
+        norm_type: NormType = NormType.LAYER,
     ):
         """
         :param num_layers: number of Graphormer layers
@@ -70,7 +71,7 @@ class Graphormer(nn.Module):
                     n_heads=self.n_heads,
                     ffn_dim=self.ffn_hidden_dim,
                     ffn_dropout=dropout,
-                    rescale=rescale,
+                    norm_type=norm_type,
                 )
                 for _ in range(self.num_layers)
             ]

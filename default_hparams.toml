@@ -31,3 +31,4 @@ lr_reset = 0
 lr_factor = 0.5
 loss_reduction = "mean"
 accumulation_steps = 1
+norm_type = "layer"

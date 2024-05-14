@@ -1,5 +1,6 @@
 from typing import Dict, Self
 from graphormer.model import Graphormer
+from graphormer.config.options import NormType
 
 
 class ModelConfig:
@@ -17,7 +18,7 @@ class ModelConfig:
         self.max_path_distance = None
         self.dropout = None
         self.state_dict = None
-        self.rescale = None
+        self.norm_type = None
 
     def with_num_layers(self, num_layers: int) -> Self:
         self.num_layers = num_layers
@@ -67,8 +68,8 @@ class ModelConfig:
         self.dropout = dropout
         return self
 
-    def with_rescale(self, rescale: bool) -> Self:
-        self.rescale = rescale
+    def with_norm_type(self, norm_type: NormType) -> Self:
+        self.norm_type = norm_type
         return self
 
     def with_state_dict(self, state_dict: Dict) -> Self:
@@ -100,8 +101,8 @@ class ModelConfig:
             raise AttributeError("max_path_distance is not defined for Graphormer")
         if self.dropout is None:
             raise AttributeError("dropout is not defined for Graphormer")
-        if self.rescale is None:
-            raise AttributeError("rescale is not defined for Graphormer")
+        if self.norm_type is None:
+            raise AttributeError("norm_type is not defined for Graphormer")
 
         model = Graphormer(
             num_layers=self.num_layers,
@@ -116,7 +117,7 @@ class ModelConfig:
             max_out_degree=self.max_out_degree,
             max_path_distance=self.max_path_distance,
             dropout=self.dropout,
-            rescale=self.rescale,
+            norm_type=self.norm_type,
         )
 
         if self.state_dict is not None:
