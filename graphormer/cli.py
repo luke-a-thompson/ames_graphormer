@@ -179,6 +179,7 @@ def tune(**kwargs):
 
     match hparam_config.optimizer_type:
         case OptimizerType.SGD:
+            # Baseline
             starting_points.append(
                 {
                     "nesterov": False,
@@ -240,6 +241,7 @@ def tune(**kwargs):
                 },
             )
         case OptimizerType.ADAMW:
+            # Baseline
             starting_points.append(
                 {
                     "b1": 0.9,
@@ -258,6 +260,27 @@ def tune(**kwargs):
                     "weight_decay": 0.01,
                     "dropout": 0.1,
                     "clip_grad_norm": 5.0,
+                }
+            )
+            # Discovered good parameters
+            starting_points.append(
+                {
+                    "b1": 0.8080,
+                    "b2": 0.9986,
+                    "eps": 2.417e-08,
+                    "dropout": 0.1338,
+                    "weight_decay": 0.07888,
+                    "clip_grad_norm": 5.7333,
+                }
+            )
+            starting_points.append(
+                {
+                    "b1": 0.867,
+                    "b2": 0.9977,
+                    "eps": 1e-09,
+                    "dropout": 0.0848,
+                    "weight_decay": 0.066,
+                    "clip_grad_norm": 3.0767,
                 }
             )
 
@@ -279,7 +302,6 @@ def tune(**kwargs):
 @click.option("--checkpoint_dir", default="pretrained_models")
 @click.option("--mc_samples", default=None, type=click.INT)
 @click.option("--max_path_distance", default=5)
-@click.option("--rescale", default=False)
 @click.option("--test_size", default=0.2)
 @click.option("--random_state", default=42)
 @click.option("--batch_size", default=4)

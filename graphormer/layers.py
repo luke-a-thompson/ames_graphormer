@@ -187,9 +187,9 @@ class GraphormerMultiHeadAttention(nn.Module):
         hidden_dim = x.shape[2]
         bias = (spatial_encoding + edge_encoding).unsqueeze(1)
 
-        q_x = self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).permute(0, 2, 1, 3)
-        k_x = self.linear_k(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).permute(0, 2, 1, 3)
-        v_x = self.linear_v(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).permute(0, 2, 1, 3)
+        q_x = self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).transpose(1, 2)
+        k_x = self.linear_k(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).transpose(1, 2)
+        v_x = self.linear_v(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).transpose(1, 2)
         k_x_t = k_x.transpose(-2, -1)
         a = (q_x @ k_x_t) * self.scale
         a += bias
@@ -199,7 +199,7 @@ class GraphormerMultiHeadAttention(nn.Module):
         a = torch.nan_to_num(a)
         a @= v_x
         a = self.att_dropout(a)
-        attn = a.reshape(batch_size, max_subgraph_size, hidden_dim)
+        attn = a.transpose(1, 2).contiguous().view(batch_size, max_subgraph_size, hidden_dim)
         return self.linear_out(attn)
 
 
