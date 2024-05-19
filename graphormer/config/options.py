@@ -17,6 +17,7 @@ class OptimizerType(str, Enum):
 class DatasetType(str, Enum):
     HONMA = "honma"
     HANSEN = "hansen"
+    COMBINED = "combined"
 
 
 class LossReductionType(str, Enum):

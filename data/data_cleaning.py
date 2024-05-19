@@ -19,6 +19,7 @@ def check_smiles_and_label(smiles, label):
 
     return None
 
+
 class HonmaDataset(InMemoryDataset):
     def __init__(self, root, transform=None, pre_transform=None, max_distance: int = 5):
         self.max_distance = max_distance
@@ -48,7 +49,9 @@ class HonmaDataset(InMemoryDataset):
         data_list = []
         warnings = []
 
-        for smiles, ames in tqdm(zip(honma["smiles"], honma["ames"]), total=len(honma), desc="Processing"):
+        for smiles, ames in tqdm(
+            zip(honma["smiles"], honma["ames"]), total=len(honma), desc="Processing dataset", unit="SMILES"
+        ):
             label = torch.tensor([ames], dtype=torch.float)
 
             warning = check_smiles_and_label(smiles, label)
@@ -61,7 +64,7 @@ class HonmaDataset(InMemoryDataset):
             node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
             data.node_paths = node_paths
             data.edge_paths = edge_paths
-            data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles)))
+            data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
@@ -100,7 +103,9 @@ class HansenDataset(InMemoryDataset):
         data_list = []
         warnings = []
 
-        for smiles, ames in tqdm(zip(honma["smiles"], honma["ames"]), total=len(honma), desc="Processing Hansen Dataset"):
+        for smiles, ames in tqdm(
+            zip(honma["smiles"], honma["ames"]), total=len(honma), desc="Processing Hansen Dataset"
+        ):
             label = torch.tensor([ames], dtype=torch.float)
 
             warning = check_smiles_and_label(smiles, label)
@@ -113,6 +118,7 @@ class HansenDataset(InMemoryDataset):
             node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
             data.node_paths = node_paths
             data.edge_paths = edge_paths
+            data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
@@ -120,6 +126,7 @@ class HansenDataset(InMemoryDataset):
         # Print all warnings at the end
         for warning in warnings:
             print(warning)
+
 
 class CombinedDataset(InMemoryDataset):
     def __init__(self, root, transform=None, pre_transform=None, max_distance: int = 5):
@@ -150,7 +157,9 @@ class CombinedDataset(InMemoryDataset):
         data_list = []
         warnings = []
 
-        for smiles, ames in tqdm(zip(honma["smiles"], honma["ames"]), total=len(honma), desc="Processing Combined Dataset"):
+        for smiles, ames in tqdm(
+            zip(honma["smiles"], honma["ames"]), total=len(honma), desc="Processing Combined Dataset"
+        ):
             label = torch.tensor([ames], dtype=torch.float)
 
             warning = check_smiles_and_label(smiles, label)
@@ -163,6 +172,7 @@ class CombinedDataset(InMemoryDataset):
             node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
             data.node_paths = node_paths
             data.edge_paths = edge_paths
+            data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
