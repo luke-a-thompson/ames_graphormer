@@ -61,6 +61,7 @@ class HonmaDataset(InMemoryDataset):
             node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
             data.node_paths = node_paths
             data.edge_paths = edge_paths
+            data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles)))
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
@@ -172,5 +173,7 @@ class CombinedDataset(InMemoryDataset):
 
 
 if __name__ == "__main__":
+    dataset = HonmaDataset("data")
+    dataset = HansenDataset("data")
     dataset = CombinedDataset("data")
-    print(len(dataset))
+    print("Datasets built")

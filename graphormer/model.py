@@ -6,6 +6,11 @@ from torch import nn
 from graphormer.layers import CentralityEncoding, EdgeEncoding, GraphormerEncoderLayer, SpatialEncoding
 from graphormer.config.options import NormType
 
+import warnings
+from torch.jit import TracerWarning
+
+warnings.filterwarnings("ignore", category=TracerWarning)
+
 
 class Graphormer(nn.Module):
     def __init__(
