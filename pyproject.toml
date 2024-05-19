@@ -10,6 +10,7 @@ readme = "README.md"
 train = "graphormer.cli:train"
 inference = "graphormer.cli:inference"
 tune = "graphormer.cli:tune"
+analyze = "graphormer.cli:analyze"
 
 [[tool.poetry.packages]]
 include = "graphormer"

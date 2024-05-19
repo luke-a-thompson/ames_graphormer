@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import List, Dict
+from typing import List, Dict, Tuple, Optional
 from sklearn.calibration import CalibrationDisplay
 import numpy as np
 import matplotlib.pyplot as plt
@@ -120,29 +120,24 @@ def save_mc_bacs(df: pd.DataFrame, model_name: str, global_results_path: str) ->
     updated_df.to_csv(bac_csv)
 
 
-def perform_friedman_test(
-    df_list: List[List[float]], model_names: List[str], alpha: float = 0.05
-) -> tuple[float, float, pd.DataFrame]:
-    stat, p = friedmanchisquare(*df_list)
+def friedman_from_bac_csv(bac_csv_path: str, models_to_friedman: list, alpha: float = 0.05) -> Tuple[float, float, Optional[pd.DataFrame]]:
+    bac_df = pd.read_csv(bac_csv_path, index_col=0)
+    model_rows = {}
 
-    if not stat or not p:
-        raise ValueError(f"Friedman test failed: stat={stat}, p={p}")
-    if len(df_list) != len(model_names):
-        raise ValueError("Each model in df_list must have a corresponding name in model_names")
+    for index, row in bac_df.iterrows():
+        if index in models_to_friedman:
+            model_rows[index] = row.tolist()
 
-    posthoc_array = np.array(df_list).T
+    stat, p = friedmanchisquare(*model_rows.values())
 
-    print("Statistics=%.3f, p=%.3f" % (stat, p))
+    print('Statistics=%.3f, p=%.3f' % (stat, p))
 
     if p < alpha:
-        print("Different distributions (reject H0) - Performing post hoc test")
-        posthoc_results_df = posthoc_conover_friedman(posthoc_array, p_adjust="holm")
-        posthoc_results_df = posthoc_results_df.rename(
-            index=dict(enumerate(model_names)), columns=dict(enumerate(model_names))
-        )
+        print('Different distributions (reject H0) - Performing post hoc test')
+        posthoc_results_df = posthoc_conover_friedman(bac_df.T)
         return stat, p, posthoc_results_df
     else:
-        print("Same distributions (fail to reject H0) - No need for post hoc")
+        print('Same distributions (fail to reject H0) - No need for post hoc')
         return stat, p
 
 

@@ -1,6 +1,7 @@
 import click
 import tomllib
-from typing import Optional
+from typing import Optional, List
+from pathlib import Path
 from optuna.pruners import HyperbandPruner
 from optuna.samplers import TPESampler
 from optuna.trial import Trial
@@ -12,7 +13,7 @@ from graphormer.config.options import LossReductionType, NormType, OptimizerType
 from graphormer.config.tuning_hparams import TuningHyperparameterConfig
 from graphormer.train import train_model
 from graphormer.inference import inference_model
-from graphormer.results import save_results
+from graphormer.results import save_results, friedman_from_bac_csv
 
 
 def configure(ctx, param, filename):
@@ -326,3 +327,13 @@ def inference(mc_samples: Optional[int], **kwargs):
 
     mc_dropout = mc_samples is not None
     save_results(results, hparam_config.name, mc_dropout)
+
+
+# Example: poetry run analyze --models results,results2,results3
+@click.command()
+@click.option("--bac_csv_path", type=click.Path(exists=True), default="results/MC_BACs.csv")
+@click.option("--models", type=click.STRING, callback=lambda ctx, param, value: value.split(","), required=True)
+@click.option("--alpha", default=0.05)
+def analyze(bac_csv_path: Path, models: List[str], alpha: float):
+    assert len(models) >= 3, "The Friedman test requires at least 3 models to compare."
+    friedman_from_bac_csv(bac_csv_path, models, alpha)
