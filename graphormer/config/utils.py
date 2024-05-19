@@ -12,6 +12,7 @@ def save_checkpoint(
     optimizer: torch.optim.Optimizer,
     loss: _Loss,
     lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
+    suffix: Optional[str] = None,
 ) -> None:
     """
     Save the model weights, optimizer state, and other necessary information to a checkpoint file.
@@ -42,14 +43,23 @@ def save_checkpoint(
         "loss_state_dict": loss.state_dict(),
     }
 
+    name = hparams.name
+    if suffix is not None:
+        name = f"{hparams.name}_{suffix}"
+
     try:
-        torch.save(checkpoint, f"{hparams.checkpoint_dir}/{hparams.name}.pt")
-        print(f"Checkpoint successfully saved to {hparams.checkpoint_dir}/{hparams.name}.pt")
+        torch.save(checkpoint, f"{hparams.checkpoint_dir}/{name}.pt")
+        print(f"Checkpoint successfully saved to {hparams.checkpoint_dir}/{name}.pt")
     except Exception as e:
-        print(f"Failed to save {hparams.checkpoint_dir}/{hparams.name}. Error: {e}")
+        print(f"Failed to save {hparams.checkpoint_dir}/{name}. Error: {e}")
 
 
-def model_init_print(hparams: HyperparameterConfig, model: Optional[torch.nn.Module] = None, train_dataloader: Optional[DataLoader] = None, test_dataloader: Optional[DataLoader] = None):
+def model_init_print(
+    hparams: HyperparameterConfig,
+    model: Optional[torch.nn.Module] = None,
+    train_dataloader: Optional[DataLoader] = None,
+    test_dataloader: Optional[DataLoader] = None,
+):
     """
     Display an overview of the training parameters.
 
@@ -84,9 +94,9 @@ def model_init_print(hparams: HyperparameterConfig, model: Optional[torch.nn.Mod
     table.add_column("Value", overflow="fold")
 
     if train_dataloader is not None:
-        table.add_row("Train Dataset Size", str(len(train_dataloader.dataset))) # type: ignore
+        table.add_row("Train Dataset Size", str(len(train_dataloader.dataset)))  # type: ignore
     if test_dataloader is not None:
-        table.add_row("Validation Dataset Size", str(len(test_dataloader.dataset))) # type: ignore
+        table.add_row("Validation Dataset Size", str(len(test_dataloader.dataset)))  # type: ignore
 
     for name, value in vars(hparams).items():
         table.add_row(name, str(value))

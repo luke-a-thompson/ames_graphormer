@@ -1,3 +1,4 @@
+from typing import List, Optional
 import torch
 import torch.nn.utils.rnn as rnn
 from torch import nn
@@ -16,12 +17,13 @@ class Graphormer(nn.Module):
         edge_embedding_dim: int,
         ffn_hidden_dim: int,
         output_dim: int,
-        n_heads: int,
         max_in_degree: int,
         max_out_degree: int,
         max_path_distance: int,
         dropout: float = 0.05,
         norm_type: NormType = NormType.LAYER,
+        n_heads: Optional[int] = None,
+        heads_by_layer: Optional[List[int]] = None,
     ):
         """
         :param num_layers: number of Graphormer layers
@@ -35,6 +37,9 @@ class Graphormer(nn.Module):
         :param max_out_degree: max in degree of nodes
         :param max_path_distance: max pairwise distance between two nodes
         """
+        if n_heads is None and heads_by_layer is None:
+            raise ValueError("n_heads or heads_by_layer must be defined.")
+
         super().__init__()
 
         self.num_layers = num_layers
@@ -44,7 +49,6 @@ class Graphormer(nn.Module):
         self.edge_embedding_dim = edge_embedding_dim
         self.ffn_hidden_dim = ffn_hidden_dim
         self.output_dim = output_dim
-        self.n_heads = n_heads
         self.max_in_degree = max_in_degree
         self.max_out_degree = max_out_degree
         self.max_path_distance = max_path_distance
@@ -64,16 +68,25 @@ class Graphormer(nn.Module):
 
         self.edge_encoding = EdgeEncoding(self.edge_embedding_dim, self.max_path_distance)
 
+        if heads_by_layer is None:
+            assert n_heads is not None
+            heads_by_layer = [n_heads for _ in range(num_layers)]
+
+        if len(heads_by_layer) != self.num_layers:
+            raise ValueError(
+                f"The length of heads_by_layer {len(heads_by_layer)} must equal the number of layers {self.num_layers}"
+            )
+
         self.layers = nn.ModuleList(
             [
                 GraphormerEncoderLayer(
                     hidden_dim=self.hidden_dim,
-                    n_heads=self.n_heads,
+                    n_heads=n_heads,
                     ffn_dim=self.ffn_hidden_dim,
                     ffn_dropout=dropout,
                     norm_type=norm_type,
                 )
-                for _ in range(self.num_layers)
+                for n_heads in heads_by_layer
             ]
         )
 

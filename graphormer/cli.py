@@ -39,7 +39,8 @@ def configure(ctx, param, filename):
 @click.option("--hidden_dim", default=128)
 @click.option("--edge_embedding_dim", default=128)
 @click.option("--ffn_hidden_dim", default=80)
-@click.option("--n_heads", default=4)
+@click.option("--n_heads", default=None)
+@click.option("--heads_by_layer", multiple=True, default=[], type=click.INT)
 @click.option("--max_in_degree", default=5)
 @click.option("--max_out_degree", default=5)
 @click.option("--max_path_distance", default=5)
@@ -73,6 +74,15 @@ def configure(ctx, param, filename):
 @click.option("--lr_window", default=10)
 @click.option("--lr_reset", default=0)
 @click.option("--lr_factor", default=0.5)
+@click.option("--pct_start", default=0.3)
+@click.option("--div_factor", default=25)
+@click.option("--final_div_factor", default=1e4)
+@click.option("--cycle_momentum", default=True)
+@click.option("--three_phase", default=False)
+@click.option("--max_momentum", default=0.95)
+@click.option("--base_momentum", default=0.85)
+@click.option("--last_effective_batch_num", default=-1)
+@click.option("--anneal_strategy", default="cos")
 @click.option("--name", default=None)
 @click.option("--checkpt_save_interval", default=5)
 @click.option("--accumulation_steps", default=1)
@@ -105,7 +115,8 @@ def train(**kwargs):
 @click.option("--hidden_dim", default=128)
 @click.option("--edge_embedding_dim", default=128)
 @click.option("--ffn_hidden_dim", default=80)
-@click.option("--n_heads", default=4)
+@click.option("--n_heads", default=None)
+@click.option("--heads_by_layer", multiple=True, default=[], type=click.INT)
 @click.option("--max_in_degree", default=5)
 @click.option("--max_out_degree", default=5)
 @click.option("--max_path_distance", default=5)
@@ -265,22 +276,22 @@ def tune(**kwargs):
             # Discovered good parameters
             starting_points.append(
                 {
-                    "b1": 0.8080,
-                    "b2": 0.9986,
-                    "eps": 2.417e-08,
-                    "dropout": 0.1338,
-                    "weight_decay": 0.07888,
-                    "clip_grad_norm": 5.7333,
-                }
-            )
-            starting_points.append(
-                {
                     "b1": 0.867,
                     "b2": 0.9977,
                     "eps": 1e-09,
                     "dropout": 0.0848,
                     "weight_decay": 0.066,
                     "clip_grad_norm": 3.0767,
+                }
+            )
+            starting_points.append(
+                {
+                    "b1": 0.8255,
+                    "b2": 0.99755,
+                    "eps": 9.0837e-08,
+                    "dropout": 0.26312,
+                    "weight_decay": 0.01895,
+                    "clip_grad_norm": 3.20889,
                 }
             )
 

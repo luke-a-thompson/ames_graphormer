@@ -1,12 +1,13 @@
-from typing import Optional, Tuple
+from typing import Optional
 import optuna
 import torch
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
-from torch.optim.lr_scheduler import PolynomialLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import OneCycleLR, PolynomialLR, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
 from graphormer.cli import LossReductionType
 from graphormer.config.data import DataConfig
+from graphormer.config.options import SchedulerType
 from graphormer.schedulers import GreedyLR
 from graphormer.config.utils import calculate_pos_weight, model_init_print, save_checkpoint
 from graphormer.config.hparams import HyperparameterConfig
@@ -27,8 +28,10 @@ def train_model(
     model_config = hparam_config.model_config()
     loss_config = hparam_config.loss_config()
     optimizer_config = hparam_config.optimizer_config()
+    accumulation_steps = optimizer_config.accumulation_steps
     scheduler_config = hparam_config.scheduler_config()
     assert hparam_config.batch_size is not None
+    assert hparam_config.last_effective_batch_num is not None
 
     writer = logging_config.build()
     if train_loader is None or test_loader is None:
@@ -47,11 +50,13 @@ def train_model(
     pos_weight = calculate_pos_weight(train_loader)
     loss_function = loss_config.with_pos_weight(pos_weight).build()
     optimizer = optimizer_config.build(model)
-    scheduler = hparam_config.scheduler_config().build(optimizer)
+    scheduler_config = hparam_config.scheduler_config()
+    if scheduler_config.scheduler_type == SchedulerType.ONE_CYCLE:
+        scheduler_config = scheduler_config.with_train_batches_per_epoch(len(train_loader))
+    scheduler = scheduler_config.build(optimizer)
     effective_batch_size = scheduler_config.effective_batch_size
     epochs = hparam_config.epochs
     start_epoch = hparam_config.start_epoch
-    accumulation_steps = optimizer_config.accumulation_steps
     loss_reduction = optimizer_config.loss_reduction_type
     model_init_print(hparam_config, model, train_loader, test_loader)
     model.train()
@@ -104,6 +109,9 @@ def train_model(
             if should_step(batch_idx, accumulation_steps, train_batches_per_epoch):
                 optimizer.step()
                 optimizer.zero_grad()
+                if isinstance(scheduler, OneCycleLR):
+                    scheduler.step()
+                    hparam_config.last_effective_batch_num += 1
 
             batch_loss = loss.item()
             writer.add_scalar("train/batch_loss", batch_loss, train_batch_num)
@@ -191,6 +199,18 @@ def train_model(
             f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
                 avg_eval_loss:.4f} | Eval BAC: {bac:.4f} | Eval ACC: {ac:.4f}"
         )
+
+        if total_eval_loss < hparam_config.best_loss and trial is None:
+            hparam_config.best_loss = total_eval_loss
+            save_checkpoint(
+                epoch,
+                hparam_config,
+                model,
+                optimizer,
+                loss_function,
+                scheduler,
+                "best",
+            )
 
         if epoch % hparam_config.checkpt_save_interval == 0 and trial is None:
             save_checkpoint(

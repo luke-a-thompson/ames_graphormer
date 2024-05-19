@@ -1,4 +1,4 @@
-from typing import Dict, Self
+from typing import Dict, List, Self
 from graphormer.model import Graphormer
 from graphormer.config.options import NormType
 
@@ -13,6 +13,7 @@ class ModelConfig:
         self.ffn_hidden_dim = None
         self.output_dim = None
         self.n_heads = None
+        self.heads_by_layer = None
         self.max_in_degree = None
         self.max_out_degree = None
         self.max_path_distance = None
@@ -50,6 +51,10 @@ class ModelConfig:
 
     def with_num_heads(self, n_heads: int) -> Self:
         self.n_heads = n_heads
+        return self
+
+    def with_heads_by_layer(self, heads_by_layer: List[int]) -> Self:
+        self.heads_by_layer = heads_by_layer
         return self
 
     def with_max_in_degree(self, max_in_degree: int) -> Self:
@@ -91,8 +96,6 @@ class ModelConfig:
             raise AttributeError("ffn_hidden_dim is not defined for Graphormer")
         if self.output_dim is None:
             raise AttributeError("output_dim is not defined for Graphormer")
-        if self.n_heads is None:
-            raise AttributeError("n_heads is not defined for Graphormer")
         if self.max_in_degree is None:
             raise AttributeError("max_in_degree is not defined for Graphormer")
         if self.max_out_degree is None:
@@ -103,6 +106,8 @@ class ModelConfig:
             raise AttributeError("dropout is not defined for Graphormer")
         if self.norm_type is None:
             raise AttributeError("norm_type is not defined for Graphormer")
+        if self.n_heads is None and self.heads_by_layer is None:
+            raise AttributeError("n_heads or heads_by_layer must be defined for Graphormer")
 
         model = Graphormer(
             num_layers=self.num_layers,
@@ -113,6 +118,7 @@ class ModelConfig:
             ffn_hidden_dim=self.ffn_hidden_dim,
             output_dim=self.output_dim,
             n_heads=self.n_heads,
+            heads_by_layer=self.heads_by_layer,
             max_in_degree=self.max_in_degree,
             max_out_degree=self.max_out_degree,
             max_path_distance=self.max_path_distance,

@@ -4,9 +4,9 @@ from graphormer.layers import GraphormerMultiHeadAttention
 
 class TestMultiHeadAttentionGroup:
     def test_forward(self):
-        embedding_dim = 6
+        embedding_dim = 256
         num_nodes = 3
-        num_heads = 2
+        num_heads = 8
         batch_size = 1
         with torch.no_grad():
             weights = torch.nn.Parameter(

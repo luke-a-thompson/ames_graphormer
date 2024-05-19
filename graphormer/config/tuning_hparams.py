@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from random import random
 from graphormer.config.data import DataConfig
 from graphormer.config.hparams import HyperparameterConfig
@@ -30,6 +30,7 @@ class TuningHyperparameterConfig:
         edge_embedding_dim: Optional[int] = None,
         ffn_hidden_dim: Optional[int] = None,
         n_heads: Optional[int] = None,
+        heads_by_layer: Optional[List[int]] = None,
         max_in_degree: Optional[int] = None,
         max_out_degree: Optional[int] = None,
         output_dim: Optional[int] = None,
@@ -74,6 +75,19 @@ class TuningHyperparameterConfig:
         min_lr_reset: Optional[int] = None,
         max_lr_factor: Optional[float] = None,
         min_lr_factor: Optional[float] = None,
+        min_pct_start: Optional[float] = None,
+        max_pct_start: Optional[float] = None,
+        min_div_factor: Optional[float] = None,
+        max_div_factor: Optional[float] = None,
+        min_final_div_factor: Optional[float] = None,
+        max_final_div_factor: Optional[float] = None,
+        cycle_momentum: Optional[bool] = None,
+        three_phase: Optional[bool] = None,
+        min_max_momentum: Optional[float] = None,
+        max_max_momentum: Optional[float] = None,
+        min_base_momentum: Optional[float] = None,
+        max_base_momentum: Optional[float] = None,
+        anneal_strategy: Optional[str] = None,
         # Logging Parameters
         logdir: Optional[str] = None,
         # Training Parameters
@@ -100,6 +114,7 @@ class TuningHyperparameterConfig:
         self.edge_embedding_dim = edge_embedding_dim
         self.ffn_hidden_dim = ffn_hidden_dim
         self.n_heads = n_heads
+        self.heads_by_layer = heads_by_layer
         self.max_in_degree = max_in_degree
         self.max_out_degree = max_out_degree
         self.output_dim = output_dim
@@ -146,6 +161,19 @@ class TuningHyperparameterConfig:
         self.min_lr_reset = min_lr_reset
         self.max_lr_factor = max_lr_factor
         self.min_lr_factor = min_lr_factor
+        self.min_pct_start = min_pct_start
+        self.max_pct_start = max_pct_start
+        self.min_div_factor = min_div_factor
+        self.max_div_factor = max_div_factor
+        self.min_final_div_factor = min_final_div_factor
+        self.max_final_div_factor = max_final_div_factor
+        self.cycle_momentum = cycle_momentum
+        self.three_phase = three_phase
+        self.min_max_momentum = min_max_momentum
+        self.max_max_momentum = max_max_momentum
+        self.min_base_momentum = min_base_momentum
+        self.max_base_momentum = max_base_momentum
+        self.anneal_strategy = anneal_strategy
 
         # Logging Parameters
         self.logdir = logdir
@@ -231,6 +259,26 @@ class TuningHyperparameterConfig:
             raise AttributeError("accumulation_steps not defined for TuningHyperparameterConfig")
         if self.tune_size is None:
             raise AttributeError("tune_size not defined for TuningHyperparameterConfig")
+        if self.min_pct_start is None:
+            raise AttributeError("min_pct_start not defined for TuningHyperparameterConfig")
+        if self.max_pct_start is None:
+            raise AttributeError("max_pct_start not defined for TuningHyperparameterConfig")
+        if self.min_div_factor is None:
+            raise AttributeError("min_div_factor not defined for TuningHyperparameterConfig")
+        if self.max_div_factor is None:
+            raise AttributeError("max_div_factor not defined for TuningHyperparameterConfig")
+        if self.min_final_div_factor is None:
+            raise AttributeError("min_final_div_factor not defined for TuningHyperparameterConfig")
+        if self.max_final_div_factor is None:
+            raise AttributeError("max_final_div_factor not defined for TuningHyperparameterConfig")
+        if self.min_base_momentum is None:
+            raise AttributeError("min_base_momentum not defined for TuningHyperparameterConfig")
+        if self.max_base_momentum is None:
+            raise AttributeError("max_base_momentum not defined for TuningHyperparameterConfig")
+        if self.min_max_momentum is None:
+            raise AttributeError("min_max_momentum not defined for TuningHyperparameterConfig")
+        if self.max_max_momentum is None:
+            raise AttributeError("max_max_momentum not defined for TuningHyperparameterConfig")
 
         if self.optimizer_type is None:
             optimizer_type = OptimizerType(
@@ -288,6 +336,14 @@ class TuningHyperparameterConfig:
         lr_smooth = None
         lr_min = None
         lr_max = None
+        pct_start = None
+        div_factor = None
+        final_div_factor = None
+        max_momentum = None
+        base_momentum = None
+        cycle_momentum = self.cycle_momentum
+        three_phase = self.three_phase
+        anneal_strategy = self.anneal_strategy
 
         match scheduler_type:
             case SchedulerType.GREEDY:
@@ -307,6 +363,20 @@ class TuningHyperparameterConfig:
                 lr_cooldown = trial.suggest_int("lr_cooldown", self.min_lr_cooldown, self.max_lr_cooldown)
             case SchedulerType.POLYNOMIAL:
                 lr_power = trial.suggest_float("lr_power", self.min_lr_power, self.max_lr_power)
+            case SchedulerType.ONE_CYCLE:
+                pct_start = trial.suggest_float("pct_start", self.min_pct_start, self.max_pct_start)
+                div_factor = trial.suggest_float("div_factor", self.min_div_factor, self.max_div_factor)
+                final_div_factor = trial.suggest_float(
+                    "final_div_factor", self.min_final_div_factor, self.max_final_div_factor
+                )
+                if cycle_momentum is None:
+                    cycle_momentum = trial.suggest_categorical("cycle_momentum", [True, False])
+                if three_phase is None:
+                    three_phase = trial.suggest_categorical("three_phase", [True, False])
+                max_momentum = trial.suggest_float("max_momentum", self.min_max_momentum, self.max_max_momentum)
+                base_momentum = trial.suggest_float("base_momentum", self.min_base_momentum, self.max_base_momentum)
+                if anneal_strategy is None:
+                    anneal_strategy = trial.suggest_categorical("anneal_strategy", ["cos", "linear"])
 
         return HyperparameterConfig(
             datadir=self.datadir,
@@ -332,6 +402,7 @@ class TuningHyperparameterConfig:
             dropout=trial.suggest_float("dropout", self.min_dropout, self.max_dropout),
             batch_size=self.batch_size,
             norm_type=norm_type,
+            heads_by_layer=self.heads_by_layer,
             # Optimizer Parameters
             optimizer_type=optimizer_type,
             lr=self.lr,
@@ -355,6 +426,14 @@ class TuningHyperparameterConfig:
             lr_reset=lr_reset,
             lr_factor=lr_factor,
             lr_smooth=lr_smooth,
+            pct_start=pct_start,
+            div_factor=div_factor,
+            final_div_factor=final_div_factor,
+            cycle_momentum=cycle_momentum,
+            three_phase=three_phase,
+            max_momentum=max_momentum,
+            base_momentum=base_momentum,
+            anneal_strategy=anneal_strategy,
             # Training Parameters
             epochs=self.epochs,
             accumulation_steps=self.accumulation_steps,

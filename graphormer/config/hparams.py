@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Optional, Self
+from typing import Any, Dict, List, Optional, Self
 import torch
 import datetime
 from random import random
@@ -19,6 +19,7 @@ class HyperparameterConfig:
         name: Optional[str] = None,
         random_state: int = int(random() * 1e9),
         torch_device: str = "cuda",
+        best_loss: float = float("inf"),
         # Data Parameters
         datadir: Optional[str] = None,
         dataset: Optional[DatasetType] = None,
@@ -35,6 +36,7 @@ class HyperparameterConfig:
         edge_embedding_dim: Optional[int] = None,
         ffn_hidden_dim: Optional[int] = None,
         n_heads: Optional[int] = None,
+        heads_by_layer: Optional[List[int]] = None,
         max_in_degree: Optional[int] = None,
         max_out_degree: Optional[int] = None,
         dropout: Optional[float] = None,
@@ -63,6 +65,15 @@ class HyperparameterConfig:
         lr_window: Optional[int] = None,
         lr_reset: Optional[int] = None,
         lr_factor: Optional[float] = None,
+        pct_start: Optional[float] = None,
+        div_factor: Optional[float] = None,
+        final_div_factor: Optional[float] = None,
+        cycle_momentum: Optional[bool] = None,
+        three_phase: Optional[bool] = None,
+        max_momentum: Optional[float | List[float]] = None,
+        base_momentum: Optional[float | List[float]] = None,
+        last_effective_batch_num: Optional[int] = None,
+        anneal_strategy: Optional[str] = None,
         # Training Parameters
         start_epoch: int = 0,
         epochs: int = 10,
@@ -80,6 +91,7 @@ class HyperparameterConfig:
     ):
         if name is None:
             name = f"model_{datetime.datetime.now().strftime("%d-%m-%y-%H-%M")}"
+        self.best_loss = best_loss
         self.datadir = datadir
         self.dataset = dataset
         self.batch_size = batch_size
@@ -89,6 +101,7 @@ class HyperparameterConfig:
         self.edge_embedding_dim = edge_embedding_dim
         self.ffn_hidden_dim = ffn_hidden_dim
         self.n_heads = n_heads
+        self.heads_by_layer = heads_by_layer
         self.max_in_degree = max_in_degree
         self.max_out_degree = max_out_degree
         self.output_dim = output_dim
@@ -116,6 +129,15 @@ class HyperparameterConfig:
         self.lr_window = lr_window
         self.lr_reset = lr_reset
         self.lr_factor = lr_factor
+        self.pct_start = pct_start
+        self.div_factor = div_factor
+        self.final_div_factor = final_div_factor
+        self.cycle_momentum = cycle_momentum
+        self.three_phase = three_phase
+        self.max_momentum = max_momentum
+        self.base_momentum = base_momentum
+        self.last_effective_batch_num = last_effective_batch_num
+        self.anneal_strategy = anneal_strategy
         self.checkpt_save_interval = checkpt_save_interval
         self.accumulation_steps = accumulation_steps
         self.loss_reduction = loss_reduction
@@ -187,6 +209,8 @@ class HyperparameterConfig:
             config = config.with_dropout(self.dropout)
         if self.norm_type is not None:
             config = config.with_norm_type(self.norm_type)
+        if self.heads_by_layer is not None:
+            config = config.with_heads_by_layer(self.heads_by_layer)
         if self.model_state_dict is not None:
             config = config.with_state_dict(self.model_state_dict)
             self.model_state_dict = None
@@ -228,6 +252,25 @@ class HyperparameterConfig:
             config = config.with_patience(self.lr_patience)
         if self.lr_reset is not None:
             config = config.with_reset(self.lr_reset)
+        if self.pct_start is not None:
+            config = config.with_pct_start(self.pct_start)
+        if self.div_factor is not None:
+            config = config.with_div_factor(self.div_factor)
+        if self.three_phase is not None:
+            config = config.with_three_phase(self.three_phase)
+        if self.max_momentum is not None:
+            config = config.with_max_momentum(self.max_momentum)
+        if self.final_div_factor is not None:
+            config = config.with_final_div_factor(self.final_div_factor)
+        if self.base_momentum is not None:
+            config = config.with_base_momentum(self.base_momentum)
+        if self.last_effective_batch_num is not None:
+            config = config.with_last_effective_batch_num(self.last_effective_batch_num)
+        if self.cycle_momentum is not None:
+            config = config.with_cycle_momentum(self.cycle_momentum)
+        if self.anneal_strategy is not None:
+            config = config.with_anneal_strategy(self.anneal_strategy)
+
         if self.scheduler_state_dict is not None:
             config = config.with_state_dict(self.scheduler_state_dict)
             self.scheduler_state_dict = None
