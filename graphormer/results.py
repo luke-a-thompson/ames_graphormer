@@ -1,11 +1,46 @@
 import pandas as pd
+from typing import List, Dict
 from sklearn.calibration import CalibrationDisplay
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats import friedmanchisquare
+from scikit_posthocs import posthoc_conover_friedman
+from sklearn.metrics import balanced_accuracy_score
+import os
 
 
-def plot_calibration_curve(df: pd.DataFrame, mc_dropout: bool = True):
-    name = "Median Calibration" if mc_dropout else "Calibration Curve"
+# Results dict: Dict[mc_sample, Dict[label, List[preds]]]
+def save_results(results_dict: Dict[int, Dict[str, List[float] | int]], model_name: str, mc_samples) -> None:
+    result_type = "mc_dropout" if mc_samples else "regular"
+    global_results_path = "results"
+    model_results_path = f"results/{model_name}_model"
+
+    os.makedirs(model_results_path, exist_ok=True)
+
+    results_df = pd.DataFrame(results_dict)
+
+    results_df.to_pickle(f"{model_results_path}/{result_type}_preds.pkl")
+    plot_calibration_curve(results_df, model_name, model_results_path, mc_samples)
+    save_mc_bacs(results_df, model_name, global_results_path)
+
+    print(f"Predictions, calibration curve, BACs saved to {model_results_path}")
+
+
+def plot_calibration_curve(df: pd.DataFrame, model_name: str, save_path: str, mc_dropout: bool = True) -> None:
+    """
+    Plots the calibration curve for a given DataFrame.
+
+    Args:
+        df (pd.DataFrame): The DataFrame containing the calibration data.
+        name (str): The name of the model.
+        mc_dropout (bool, optional): Whether to include the median calibration curve and confidence intervals.
+            Defaults to True.
+
+    Returns:
+        None
+    """
+
+    chart_type = "CI Calibration" if mc_dropout else "Calibration Curve"
 
     df = df.transpose()
     df.label = df.label.astype(int)
@@ -14,7 +49,7 @@ def plot_calibration_curve(df: pd.DataFrame, mc_dropout: bool = True):
 
     # Generate the basic calibration curve
     fig, ax = plt.subplots()
-    CalibrationDisplay.from_predictions(df["label"], df["median_preds"], ax=ax, strategy="uniform", name=name)
+    CalibrationDisplay.from_predictions(df["label"], df["median_preds"], ax=ax, strategy="uniform", name=model_name)
 
     if mc_dropout:
         CalibrationDisplay.from_predictions(df["label"], df["upper_ci"], ax=ax, strategy="uniform", name="Upper CI")
@@ -28,9 +63,87 @@ def plot_calibration_curve(df: pd.DataFrame, mc_dropout: bool = True):
             if line.get_label() == "Upper CI" or line.get_label() == "Lower CI":
                 line.remove()
 
+        assert (
+            upper_ci_y.shape == lower_ci_y.shape == ci_x.shape
+        ), f"upper_ci_y: {upper_ci_y} and lower_ci_y: {lower_ci_y} shapes do not match."
         ax.fill_between(ci_x, upper_ci_y, lower_ci_y, color="gray", alpha=0.2)
 
-    plt.savefig("results/calibration_curve.png")
+    plt.savefig(f"{save_path}/{chart_type}.png")
+    print(f"Calibration curve saved to results/{save_path}/{chart_type}.png")
+
+
+def save_mc_bacs(df: pd.DataFrame, model_name: str, global_results_path: str) -> None:
+    """
+    Save the balanced accuracy scores for each Monte Carlo (MC) sample to a CSV file.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame containing the predictions and labels.
+        model_name (str): The name of the model.
+        global_results_path (str): The path to the directory containing the csv to which results will be appended.
+
+    Returns:
+        None
+    """
+    bac_list = []
+    df = df.T
+    bac_csv = os.path.join(global_results_path, "MC_BACs.csv")
+
+    preds_df = pd.DataFrame(df["preds"].tolist(), index=df.index)  # Preds_df has a col for each mc sample
+    preds_df.columns = [f"mc_sample_{i+1}" for i in preds_df.columns]
+    df = pd.concat([df, preds_df], axis=1)
+    df.drop("preds", axis=1, inplace=True)
+
+    mc_samples = len(df.columns) - 1
+
+    for sample in range(mc_samples):
+        mc_sample = df[f"mc_sample_{sample+1}"]
+        prediction = [1 if x >= 0.5 else 0 for x in mc_sample]
+        bac = balanced_accuracy_score(df["label"].astype(int), prediction)
+        bac_list.append(bac)
+
+    bac_scores_df = pd.DataFrame(
+        [bac_list], columns=[f"mc_sample_{i+1}" for i in range(mc_samples)], index=[model_name]
+    )
+
+    if os.path.exists(bac_csv):
+        existing_df = pd.read_csv(bac_csv, index_col=0)
+        if len(existing_df.columns) != len(bac_scores_df.columns):
+            raise ValueError(
+                f"Existing BAC scores in {bac_csv} have {len(existing_df.columns)} MC_sample columns, while new BAC scores from {model_name} have {len(bac_scores_df.columns)} MC_sample columns."
+            )
+        print(f"BAC scores of {model_name} appended to {bac_csv}")
+        updated_df = pd.concat([existing_df, bac_scores_df])
+    else:
+        print(f"{bac_csv} does not exist - Now creating")
+        updated_df = bac_scores_df
+
+    updated_df.to_csv(bac_csv)
+
+
+def perform_friedman_test(
+    df_list: List[List[float]], model_names: List[str], alpha: float = 0.05
+) -> tuple[float, float, pd.DataFrame]:
+    stat, p = friedmanchisquare(*df_list)
+
+    if not stat or not p:
+        raise ValueError(f"Friedman test failed: stat={stat}, p={p}")
+    if len(df_list) != len(model_names):
+        raise ValueError("Each model in df_list must have a corresponding name in model_names")
+
+    posthoc_array = np.array(df_list).T
+
+    print("Statistics=%.3f, p=%.3f" % (stat, p))
+
+    if p < alpha:
+        print("Different distributions (reject H0) - Performing post hoc test")
+        posthoc_results_df = posthoc_conover_friedman(posthoc_array, p_adjust="holm")
+        posthoc_results_df = posthoc_results_df.rename(
+            index=dict(enumerate(model_names)), columns=dict(enumerate(model_names))
+        )
+        return stat, p, posthoc_results_df
+    else:
+        print("Same distributions (fail to reject H0) - No need for post hoc")
+        return stat, p
 
 
 def get_cis(mcd_df: pd.DataFrame, confidence_level: float = 0.95):

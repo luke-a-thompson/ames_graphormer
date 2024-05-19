@@ -6,7 +6,7 @@ from graphormer.config.data import DataConfig
 from graphormer.model import Graphormer
 from graphormer.config.utils import model_init_print
 from tqdm import tqdm
-import pandas as pd
+from typing import Dict, List
 
 
 def inference_model(
@@ -14,7 +14,7 @@ def inference_model(
     inference_loader: Optional[DataLoader] = None,
     data_config: Optional[DataConfig] = None,
     mc_samples: Optional[int] = None,
-):
+) -> Dict[int, Dict[str, List[float] | int]]:
     if data_config is None:
         data_config = hparam_config.data_config()
     model_config = hparam_config.model_config()
@@ -72,11 +72,7 @@ def inference_model(
 
                     sample_idx += 1
 
-        results_df = pd.DataFrame(results)
-        results_df.to_pickle(f"{hparam_config.datadir}/results/mc_dropout_preds.pkl")
-        print(f"MC Dropout predictions saved to {hparam_config.datadir}/results/mc_dropout_preds.pkl")
-
-        return results_df
+        return results
 
     for batch_idx, batch in enumerate(inference_loader):
         sample_idx: int = batch_idx * hparam_config.batch_size
@@ -103,8 +99,4 @@ def inference_model(
 
                 sample_idx += 1
 
-    results_df = pd.DataFrame(results)
-    results_df.to_pickle(f"{hparam_config.datadir}/results/preds.pkl")
-    print(f"MC Dropout predictions saved to {hparam_config.datadir}/results/preds.pkl")
-
-    return results_df
+    return results

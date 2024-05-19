@@ -12,7 +12,7 @@ from graphormer.config.options import LossReductionType, NormType, OptimizerType
 from graphormer.config.tuning_hparams import TuningHyperparameterConfig
 from graphormer.train import train_model
 from graphormer.inference import inference_model
-from graphormer.results import plot_calibration_curve
+from graphormer.results import save_results
 
 
 def configure(ctx, param, filename):
@@ -325,4 +325,4 @@ def inference(mc_samples: Optional[int], **kwargs):
     results = inference_model(hparam_config, mc_samples=mc_samples)
 
     mc_dropout = mc_samples is not None
-    plot_calibration_curve(results, mc_dropout)
+    save_results(results, hparam_config.name, mc_dropout)
