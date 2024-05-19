@@ -45,36 +45,6 @@ class DataConfig:
                 self.num_edge_features = dataset.num_edge_features
                 self.num_classes = dataset.num_classes
 
-                if self.test_size is not None:
-                    test_ids, train_ids = train_test_split(
-                        range(len(dataset)), test_size=self.test_size, random_state=self.random_state
-                    )
-                    train_loader = DataLoader(
-                        Subset(dataset, train_ids),  # type: ignore
-                        batch_size=self.batch_size,
-                        shuffle=True,
-                        **dataloader_optimization_params,
-                    )
-                    test_loader = DataLoader(
-                        Subset(dataset, test_ids),  # type: ignore
-                        batch_size=self.batch_size,
-                        **dataloader_optimization_params,
-                    )
-
-                else:
-                    train_loader = DataLoader(dataset[:12140], batch_size=self.batch_size, shuffle=True, **dataloader_optimization_params)  # type: ignore
-                    test_loader = DataLoader(dataset[12140:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
-
-                return train_loader, test_loader
-
-            case DatasetType.HONMA:
-                from data.data_cleaning import HonmaDataset
-
-                dataset = HonmaDataset(self.data_dir, max_distance=self.max_path_distance)
-                self.num_node_features = dataset.num_node_features
-                self.num_edge_features = dataset.num_edge_features
-                self.num_classes = dataset.num_classes
-
                 test_ids, train_ids = train_test_split(
                     range(len(dataset)), test_size=self.test_size, random_state=self.random_state
                 )
@@ -89,6 +59,34 @@ class DataConfig:
                     batch_size=self.batch_size,
                     **dataloader_optimization_params,
                 )
+
+                return train_loader, test_loader
+
+            case DatasetType.HONMA:
+                from data.data_cleaning import HonmaDataset
+
+                dataset = HonmaDataset(self.data_dir, max_distance=self.max_path_distance)
+                self.num_node_features = dataset.num_node_features
+                self.num_edge_features = dataset.num_edge_features
+                self.num_classes = dataset.num_classes
+
+                # len(Honma) = 13730
+                train_loader = DataLoader(dataset[:12140], batch_size=self.batch_size, shuffle=True, **dataloader_optimization_params)  # type: ignore
+                test_loader = DataLoader(dataset[12140:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+
+                return train_loader, test_loader
+
+            case DatasetType.COMBINED:
+                from data.data_cleaning import CombinedDataset
+
+                dataset = CombinedDataset(self.data_dir, max_distance=self.max_path_distance)
+                self.num_node_features = dataset.num_node_features
+                self.num_edge_features = dataset.num_edge_features
+                self.num_classes = dataset.num_classes
+
+                # len(Combined) = 20242
+                train_loader = DataLoader(dataset[:18652], batch_size=self.batch_size, shuffle=True, **dataloader_optimization_params)  # type: ignore
+                test_loader = DataLoader(dataset[18652:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
 
                 return train_loader, test_loader
 
