@@ -1,10 +1,11 @@
+from typing import Optional
 import torch
 from torch import nn
 from torch_geometric.utils import degree
 
 from graphormer.norm import CRMSNorm, MaxNorm, RMSNorm
 from graphormer.utils import decrease_to_max_value
-from graphormer.config.options import NormType
+from graphormer.config.options import AttentionType, NormType
 
 
 class FeedForwardNetwork(nn.Module):
@@ -165,10 +166,10 @@ class GraphormerMultiHeadAttention(nn.Module):
         self.head_size = hidden_dim // num_heads
         self.linear_q = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.linear_k = nn.Linear(hidden_dim, hidden_dim, bias=False)
-        self.linear_v = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.linear_v = nn.Linear(hidden_dim, hidden_dim, bias=True)
         self.att_dropout = nn.Dropout(dropout_rate)
 
-        self.linear_out = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.linear_out = nn.Linear(hidden_dim, hidden_dim, bias=True)
 
     def forward(
         self,
@@ -184,28 +185,115 @@ class GraphormerMultiHeadAttention(nn.Module):
         """
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
-        hidden_dim = x.shape[2]
         bias = (spatial_encoding + edge_encoding).unsqueeze(1)
 
         q_x = self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).transpose(1, 2)
         k_x = self.linear_k(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).transpose(1, 2)
         v_x = self.linear_v(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).transpose(1, 2)
         k_x_t = k_x.transpose(-2, -1)
-        a = (q_x @ k_x_t) * self.scale
-        a += bias
+        a = (q_x @ k_x_t) * self.scale + bias
         pad_mask = torch.any(a != 0, dim=-1)
         a[~pad_mask] = float("-inf")
         a = torch.softmax(a, dim=-1)
         a = torch.nan_to_num(a)
         a @= v_x
         a = self.att_dropout(a)
-        attn = a.transpose(1, 2).contiguous().view(batch_size, max_subgraph_size, hidden_dim)
+        attn = a.transpose(1, 2).contiguous().view(batch_size, max_subgraph_size, self.hidden_dim)
+        return self.linear_out(attn)
+
+
+class GraphormerFishAttention(nn.Module):
+    def __init__(
+        self,
+        num_global_heads: int,
+        num_local_heads: int,
+        hidden_dim: int,
+        dropout_rate: float = 0.1,
+        max_seq_len: int = 256,
+    ):
+        super().__init__()
+        self.num_global_heads = num_global_heads
+        self.num_local_heads = num_local_heads
+
+        self.scale = hidden_dim**-0.5
+        self.hidden_dim = hidden_dim
+        assert (
+            hidden_dim % num_global_heads == 0
+        ), f"hidden_dim {
+            hidden_dim} must be divisible by num_global_heads {num_global_heads}"
+        assert (
+            num_global_heads <= num_local_heads
+        ), f"num_global_heads {num_global_heads} should be less than num_local_heads {num_local_heads}"
+
+        self.head_size = hidden_dim // num_global_heads
+        self.global_q = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.global_k = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.local_v = nn.Linear(hidden_dim, num_local_heads * self.head_size, bias=True)
+        self.att_dropout = nn.Dropout(dropout_rate)
+
+        self.sigma = nn.Parameter(0.1 * torch.ones(self.num_global_heads, requires_grad=True))
+        self.eps = torch.randn(self.num_local_heads, max_seq_len, max_seq_len).diagonal(dim1=-2, dim2=-1).diag_embed()
+        self.p = nn.Parameter(torch.randn(self.num_global_heads, self.num_local_heads, requires_grad=True))
+        self.relu = nn.ReLU()
+
+        self.linear_out = nn.Linear(num_local_heads * self.head_size, hidden_dim, bias=True)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        spatial_encoding: torch.Tensor,
+        edge_encoding: torch.Tensor,
+    ):
+        batch_size = x.shape[0]
+        max_subgraph_size = x.shape[1]
+        bias = (spatial_encoding + edge_encoding).unsqueeze(1)
+
+        global_q_x = (
+            self.global_q(x).view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size).transpose(1, 2)
+        )
+        global_k_x = (
+            self.global_k(x).view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size).transpose(1, 2)
+        )
+        v_x = self.local_v(x).view(batch_size, max_subgraph_size, self.num_local_heads, self.head_size).transpose(1, 2)
+        global_k_x_t = global_k_x.transpose(-2, -1)
+
+        # (batch_size, num_global_heads, max_seq_len, max_seq_len)
+        g = (global_q_x @ global_k_x_t) * self.scale + bias
+
+        sigma_expanded = self.sigma.square().reshape(self.num_global_heads, 1, 1, 1)
+        # (1, num_global_heads, num_local_heads, max_seq_len, max_seq_len)
+        eps = self.eps[:, :max_subgraph_size, :max_subgraph_size].to(x.device)
+        sigma_eps = (sigma_expanded * eps).unsqueeze(0)
+        # (batch_size, num_global_heads, 1, max_seq_len, max_seq_len)
+        g_k = g.unsqueeze(2)
+        # (batch_size, num_global_heads, num_local_heads, max_seq_len, max_seq_len)
+        a = g_k + sigma_eps
+        pad_mask = torch.any(g_k != 0, dim=-1, keepdim=True).broadcast_to(a.shape)
+        a = a * self.p.view(1, self.num_global_heads, self.num_local_heads, 1, 1)
+        a[pad_mask] = self.relu(a[pad_mask])
+        a[~pad_mask] = float("-inf")
+        # (batch_size, num_local_heads, max_seq_len, max_seq_len)
+        a = a.sum(dim=1)
+        a = torch.softmax(a, dim=-1)
+        a = torch.nan_to_num(a)
+        a @= v_x
+        a = self.att_dropout(a)
+        attn = a.transpose(1, 2).contiguous().view(batch_size, max_subgraph_size, self.num_local_heads * self.head_size)
         return self.linear_out(attn)
 
 
 class GraphormerEncoderLayer(nn.Module):
     def __init__(
-        self, hidden_dim: int, n_heads: int, ffn_dim=80, ffn_dropout=0.1, norm_type: NormType = NormType.LAYER
+        self,
+        hidden_dim: int,
+        n_heads: Optional[int] = None,
+        n_global_heads: Optional[int] = None,
+        n_local_heads: Optional[int] = None,
+        ffn_dim=80,
+        ffn_dropout=0.1,
+        attn_dropout=0.1,
+        norm_type: NormType = NormType.LAYER,
+        attention_type: AttentionType = AttentionType.MHA,
     ):
         """
         :param hidden_dim: node feature matrix input number of dimension
@@ -216,30 +304,51 @@ class GraphormerEncoderLayer(nn.Module):
 
         self.hidden_dim = hidden_dim
         self.n_heads = n_heads
+        self.n_global_heads = n_global_heads
+        self.n_local_heads = n_local_heads
+        self.attn_dropout = attn_dropout
+        self.ffn_dropout = ffn_dropout
+        self.ffn_dim = ffn_dim
 
-        self.attention = GraphormerMultiHeadAttention(
-            num_heads=n_heads,
-            hidden_dim=hidden_dim,
-        )
+        match attention_type:
+            case AttentionType.MHA:
+                if self.n_heads is None:
+                    raise AttributeError("n_heads must be defined for GraphormerMultiHeadAttention")
+                self.attention = GraphormerMultiHeadAttention(
+                    num_heads=self.n_heads,
+                    hidden_dim=self.hidden_dim,
+                    dropout_rate=self.attn_dropout,
+                )
+            case AttentionType.FISH:
+                if self.n_global_heads is None:
+                    raise AttributeError("n_global_heads must be defined for GraphormerFishAttention")
+                if self.n_local_heads is None:
+                    raise AttributeError("n_local_heads must be defined for GraphormerFishAttention")
+                self.attention = GraphormerFishAttention(
+                    num_global_heads=self.n_global_heads,
+                    num_local_heads=self.n_local_heads,
+                    hidden_dim=self.hidden_dim,
+                    dropout_rate=self.attn_dropout,
+                )
 
         match norm_type:
             case NormType.LAYER:
-                self.n1 = nn.LayerNorm(hidden_dim)
-                self.n2 = nn.LayerNorm(hidden_dim)
+                self.n1 = nn.LayerNorm(self.hidden_dim)
+                self.n2 = nn.LayerNorm(self.hidden_dim)
             case NormType.RMS:
-                self.n1 = RMSNorm(hidden_dim)
-                self.n2 = RMSNorm(hidden_dim)
+                self.n1 = RMSNorm(self.hidden_dim)
+                self.n2 = RMSNorm(self.hidden_dim)
             case NormType.CRMS:
-                self.n1 = CRMSNorm(hidden_dim)
-                self.n2 = CRMSNorm(hidden_dim)
+                self.n1 = CRMSNorm(self.hidden_dim)
+                self.n2 = CRMSNorm(self.hidden_dim)
             case NormType.MAX:
-                self.n1 = MaxNorm(hidden_dim)
-                self.n2 = MaxNorm(hidden_dim)
+                self.n1 = MaxNorm(self.hidden_dim)
+                self.n2 = MaxNorm(self.hidden_dim)
             case NormType.NONE:
                 self.n1 = nn.Identity()
                 self.n2 = nn.Identity()
 
-        self.ffn = FeedForwardNetwork(hidden_dim, ffn_dim, hidden_dim, ffn_dropout)
+        self.ffn = FeedForwardNetwork(self.hidden_dim, self.ffn_dim, self.hidden_dim, self.ffn_dropout)
 
     def forward(
         self,

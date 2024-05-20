@@ -9,7 +9,14 @@ import torch
 import optuna
 
 from graphormer.config.hparams import HyperparameterConfig
-from graphormer.config.options import LossReductionType, NormType, OptimizerType, SchedulerType, DatasetType
+from graphormer.config.options import (
+    AttentionType,
+    LossReductionType,
+    NormType,
+    OptimizerType,
+    SchedulerType,
+    DatasetType,
+)
 from graphormer.config.tuning_hparams import TuningHyperparameterConfig
 from graphormer.train import train_model
 from graphormer.inference import inference_model
@@ -40,7 +47,7 @@ def configure(ctx, param, filename):
 @click.option("--hidden_dim", default=128)
 @click.option("--edge_embedding_dim", default=128)
 @click.option("--ffn_hidden_dim", default=80)
-@click.option("--n_heads", default=None)
+@click.option("--n_heads", default=4)
 @click.option("--heads_by_layer", multiple=True, default=[], type=click.INT)
 @click.option("--max_in_degree", default=5)
 @click.option("--max_out_degree", default=5)
@@ -91,6 +98,11 @@ def configure(ctx, param, filename):
 @click.option("--checkpoint_dir", default="pretrained_models")
 @click.option("--dropout", default=0.05)
 @click.option("--norm_type", type=click.Choice(NormType, case_sensitive=False), default=NormType.LAYER)  # type: ignore
+@click.option("--attention_type", type=click.Choice(AttentionType, case_sensitive=False), default=AttentionType.MHA)  # type: ignore
+@click.option("--n_global_heads", default=4)
+@click.option("--n_local_heads", default=8)
+@click.option("--global_heads_by_layer", multiple=True, default=[], type=click.INT)
+@click.option("--local_heads_by_layer", multiple=True, default=[], type=click.INT)
 def train(**kwargs):
     hparam_config = HyperparameterConfig(**kwargs)
     hparam_config.load_from_checkpoint()
@@ -174,6 +186,7 @@ def train(**kwargs):
     default=None,
 )
 @click.option("--loss_reduction_type", type=click.Choice(LossReductionType, case_sensitive=False), default=None)  # type: ignore
+@click.option("--attention_type", type=click.Choice(AttentionType, case_sensitive=False), default=None)  # type: ignore
 def tune(**kwargs):
     hparam_config = TuningHyperparameterConfig(**kwargs)
     data_config = hparam_config.data_config()

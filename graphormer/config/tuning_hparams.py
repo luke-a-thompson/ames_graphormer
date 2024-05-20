@@ -2,7 +2,14 @@ from typing import List, Optional
 from random import random
 from graphormer.config.data import DataConfig
 from graphormer.config.hparams import HyperparameterConfig
-from graphormer.config.options import DatasetType, LossReductionType, OptimizerType, SchedulerType, NormType
+from graphormer.config.options import (
+    AttentionType,
+    DatasetType,
+    LossReductionType,
+    OptimizerType,
+    SchedulerType,
+    NormType,
+)
 from optuna.trial import Trial
 
 
@@ -30,13 +37,18 @@ class TuningHyperparameterConfig:
         edge_embedding_dim: Optional[int] = None,
         ffn_hidden_dim: Optional[int] = None,
         n_heads: Optional[int] = None,
+        n_global_heads: Optional[int] = None,
+        n_local_heads: Optional[int] = None,
         heads_by_layer: Optional[List[int]] = None,
+        global_heads_by_layer: Optional[List[int]] = None,
+        local_heads_by_layer: Optional[List[int]] = None,
         max_in_degree: Optional[int] = None,
         max_out_degree: Optional[int] = None,
         output_dim: Optional[int] = None,
         max_dropout: Optional[float] = None,
         min_dropout: Optional[float] = None,
         norm_type: Optional[NormType] = None,
+        attention_type: Optional[AttentionType] = None,
         # Optimizer Parameters
         optimizer_type: Optional[OptimizerType] = None,
         loss_reduction_type: Optional[LossReductionType] = None,
@@ -121,6 +133,11 @@ class TuningHyperparameterConfig:
         self.max_dropout = max_dropout
         self.min_dropout = min_dropout
         self.norm_type = norm_type
+        self.attention_type = attention_type
+        self.n_global_heads = n_global_heads
+        self.n_local_heads = n_local_heads
+        self.global_heads_by_layer = global_heads_by_layer
+        self.local_heads_by_layer = local_heads_by_layer
 
         # Optimizer Parameters
         self.optimizer_type = optimizer_type
@@ -402,7 +419,12 @@ class TuningHyperparameterConfig:
             dropout=trial.suggest_float("dropout", self.min_dropout, self.max_dropout),
             batch_size=self.batch_size,
             norm_type=norm_type,
+            attention_type=self.attention_type,
             heads_by_layer=self.heads_by_layer,
+            n_global_heads=self.n_global_heads,
+            n_local_heads=self.n_local_heads,
+            global_heads_by_layer=self.global_heads_by_layer,
+            local_heads_by_layer=self.local_heads_by_layer,
             # Optimizer Parameters
             optimizer_type=optimizer_type,
             lr=self.lr,

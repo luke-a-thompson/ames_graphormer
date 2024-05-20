@@ -4,7 +4,7 @@ import torch.nn.utils.rnn as rnn
 from torch import nn
 
 from graphormer.layers import CentralityEncoding, EdgeEncoding, GraphormerEncoderLayer, SpatialEncoding
-from graphormer.config.options import NormType
+from graphormer.config.options import NormType, AttentionType
 
 import warnings
 from torch.jit import TracerWarning
@@ -27,8 +27,13 @@ class Graphormer(nn.Module):
         max_path_distance: int,
         dropout: float = 0.05,
         norm_type: NormType = NormType.LAYER,
+        attention_type: AttentionType = AttentionType.MHA,
         n_heads: Optional[int] = None,
         heads_by_layer: Optional[List[int]] = None,
+        local_heads_by_layer: Optional[List[int]] = None,
+        global_heads_by_layer: Optional[List[int]] = None,
+        n_local_heads: Optional[int] = None,
+        n_global_heads: Optional[int] = None,
     ):
         """
         :param num_layers: number of Graphormer layers
@@ -42,8 +47,6 @@ class Graphormer(nn.Module):
         :param max_out_degree: max in degree of nodes
         :param max_path_distance: max pairwise distance between two nodes
         """
-        if n_heads is None and heads_by_layer is None:
-            raise ValueError("n_heads or heads_by_layer must be defined.")
 
         super().__init__()
 
@@ -57,6 +60,15 @@ class Graphormer(nn.Module):
         self.max_in_degree = max_in_degree
         self.max_out_degree = max_out_degree
         self.max_path_distance = max_path_distance
+        self.n_heads = n_heads
+        self.norm_type = norm_type
+        self.heads_by_layer = heads_by_layer
+        self.n_local_heads = n_local_heads
+        self.n_global_heads = n_global_heads
+        self.global_heads_by_layer = global_heads_by_layer
+        self.local_heads_by_layer = local_heads_by_layer
+        self.dropout = dropout
+        self.attention_type = attention_type
 
         self.node_embedding = nn.Linear(self.node_feature_dim, self.hidden_dim)
         self.edge_embedding = nn.Linear(self.edge_feature_dim, self.edge_embedding_dim)
@@ -73,27 +85,14 @@ class Graphormer(nn.Module):
 
         self.edge_encoding = EdgeEncoding(self.edge_embedding_dim, self.max_path_distance)
 
-        if heads_by_layer is None:
-            assert n_heads is not None
-            heads_by_layer = [n_heads for _ in range(num_layers)]
+        layers = None
+        match self.attention_type:
+            case AttentionType.MHA:
+                layers = self.mha_layers()
+            case AttentionType.FISH:
+                layers = self.fish_layers()
 
-        if len(heads_by_layer) != self.num_layers:
-            raise ValueError(
-                f"The length of heads_by_layer {len(heads_by_layer)} must equal the number of layers {self.num_layers}"
-            )
-
-        self.layers = nn.ModuleList(
-            [
-                GraphormerEncoderLayer(
-                    hidden_dim=self.hidden_dim,
-                    n_heads=n_heads,
-                    ffn_dim=self.ffn_hidden_dim,
-                    ffn_dropout=dropout,
-                    norm_type=norm_type,
-                )
-                for n_heads in heads_by_layer
-            ]
-        )
+        self.layers = nn.ModuleList(layers)
 
         self.out_lin = nn.Linear(self.hidden_dim, self.output_dim)
         self.apply(Graphormer._init_weights)
@@ -103,6 +102,61 @@ class Graphormer(nn.Module):
         for m in self.modules():
             if m.__class__.__name__.startswith("Dropout"):
                 m.train()
+
+    def fish_layers(self):
+        if self.n_global_heads is None and self.global_heads_by_layer is None:
+            raise AttributeError("global_heads or global_heads_by_layer must be defined")
+        if self.n_local_heads is None and self.local_heads_by_layer is None:
+            raise AttributeError("local_heads or local_heads_by_layer must be defined")
+
+        if self.global_heads_by_layer is None or len(self.global_heads_by_layer) == 0:
+            assert self.n_global_heads is not None
+            self.global_heads_by_layer = [self.n_global_heads for _ in range(self.num_layers)]
+
+        if self.local_heads_by_layer is None or len(self.local_heads_by_layer) == 0:
+            assert self.n_local_heads is not None
+            self.local_heads_by_layer = [self.n_local_heads for _ in range(self.num_layers)]
+
+        return [
+            GraphormerEncoderLayer(
+                hidden_dim=self.hidden_dim,
+                n_global_heads=n_global_heads,
+                n_local_heads=n_local_heads,
+                ffn_dim=self.ffn_hidden_dim,
+                ffn_dropout=self.dropout,
+                attn_dropout=self.dropout,
+                norm_type=self.norm_type,
+                attention_type=self.attention_type,
+            )
+            for n_global_heads, n_local_heads in zip(self.global_heads_by_layer, self.local_heads_by_layer)
+        ]
+
+    def mha_layers(
+        self,
+    ):
+        if self.n_heads is None and self.heads_by_layer is None:
+            raise ValueError("n_heads or heads_by_layer must be defined.")
+        if self.heads_by_layer is None or len(self.heads_by_layer) == 0:
+            assert self.n_heads is not None
+            self.heads_by_layer = [self.n_heads for _ in range(self.num_layers)]
+
+        if len(self.heads_by_layer) != self.num_layers:
+            raise ValueError(
+                f"The length of heads_by_layer {len(self.heads_by_layer)} must equal the number of layers {self.num_layers}"
+            )
+
+        return [
+            GraphormerEncoderLayer(
+                hidden_dim=self.hidden_dim,
+                n_heads=n_heads,
+                ffn_dim=self.ffn_hidden_dim,
+                ffn_dropout=self.dropout,
+                attn_dropout=self.dropout,
+                norm_type=self.norm_type,
+                attention_type=self.attention_type,
+            )
+            for n_heads in self.heads_by_layer
+        ]
 
     @classmethod
     def _init_weights(cls, m: nn.Module):

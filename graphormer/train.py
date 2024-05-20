@@ -101,6 +101,7 @@ def train_model(
             )
 
             loss = loss_function(output, y)
+
             loss.backward()
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), hparam_config.clip_grad_norm, error_if_nonfinite=True)

@@ -64,7 +64,7 @@ class HonmaDataset(InMemoryDataset):
             node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
             data.node_paths = node_paths
             data.edge_paths = edge_paths
-            data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
+            # data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
@@ -118,7 +118,7 @@ class HansenDataset(InMemoryDataset):
             node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
             data.node_paths = node_paths
             data.edge_paths = edge_paths
-            data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
+            # data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
@@ -172,7 +172,7 @@ class CombinedDataset(InMemoryDataset):
             node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
             data.node_paths = node_paths
             data.edge_paths = edge_paths
-            data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
+            # data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])

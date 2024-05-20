@@ -31,3 +31,8 @@ class NormType(str, Enum):
     RMS = "rms"
     CRMS = "crms"
     MAX = "max"
+
+
+class AttentionType(str, Enum):
+    MHA = "mha"
+    FISH = "fish"

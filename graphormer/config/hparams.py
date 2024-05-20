@@ -9,7 +9,14 @@ from graphormer.config.loss import LossConfig
 from graphormer.config.model import ModelConfig
 from graphormer.config.optimizer import OptimizerConfig
 from graphormer.config.scheduler import SchedulerConfig
-from graphormer.config.options import LossReductionType, DatasetType, SchedulerType, OptimizerType, NormType
+from graphormer.config.options import (
+    AttentionType,
+    LossReductionType,
+    DatasetType,
+    SchedulerType,
+    OptimizerType,
+    NormType,
+)
 
 
 class HyperparameterConfig:
@@ -36,11 +43,16 @@ class HyperparameterConfig:
         edge_embedding_dim: Optional[int] = None,
         ffn_hidden_dim: Optional[int] = None,
         n_heads: Optional[int] = None,
+        n_global_heads: Optional[int] = None,
+        n_local_heads: Optional[int] = None,
         heads_by_layer: Optional[List[int]] = None,
+        global_heads_by_layer: Optional[List[int]] = None,
+        local_heads_by_layer: Optional[List[int]] = None,
         max_in_degree: Optional[int] = None,
         max_out_degree: Optional[int] = None,
         dropout: Optional[float] = None,
         norm_type: Optional[NormType] = None,
+        attention_type: Optional[AttentionType] = None,
         # Optimizer Parameters
         optimizer_type: Optional[OptimizerType] = None,
         momentum: Optional[float] = None,
@@ -101,7 +113,11 @@ class HyperparameterConfig:
         self.edge_embedding_dim = edge_embedding_dim
         self.ffn_hidden_dim = ffn_hidden_dim
         self.n_heads = n_heads
+        self.n_global_heads = n_global_heads
+        self.n_local_heads = n_local_heads
         self.heads_by_layer = heads_by_layer
+        self.global_heads_by_layer = global_heads_by_layer
+        self.local_heads_by_layer = local_heads_by_layer
         self.max_in_degree = max_in_degree
         self.max_out_degree = max_out_degree
         self.output_dim = output_dim
@@ -157,6 +173,7 @@ class HyperparameterConfig:
         self.checkpoint_dir = checkpoint_dir
         self.dropout = dropout
         self.norm_type = norm_type
+        self.attention_type = attention_type
         self.model_state_dict = None
         self.optimizer_state_dict = None
         self.scheduler_state_dict = None
@@ -211,6 +228,17 @@ class HyperparameterConfig:
             config = config.with_norm_type(self.norm_type)
         if self.heads_by_layer is not None:
             config = config.with_heads_by_layer(self.heads_by_layer)
+        if self.attention_type is not None:
+            config = config.with_attention_type(self.attention_type)
+        if self.n_local_heads is not None:
+            config = config.with_n_local_heads(self.n_local_heads)
+        if self.n_global_heads is not None:
+            config = config.with_n_global_heads(self.n_global_heads)
+        if self.global_heads_by_layer is not None:
+            config = config.with_global_heads_by_layer(self.global_heads_by_layer)
+        if self.local_heads_by_layer is not None:
+            config = config.with_local_heads_by_layer(self.local_heads_by_layer)
+
         if self.model_state_dict is not None:
             config = config.with_state_dict(self.model_state_dict)
             self.model_state_dict = None

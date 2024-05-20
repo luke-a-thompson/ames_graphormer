@@ -1,6 +1,6 @@
 from typing import Dict, List, Self
 from graphormer.model import Graphormer
-from graphormer.config.options import NormType
+from graphormer.config.options import AttentionType, NormType
 
 
 class ModelConfig:
@@ -20,6 +20,11 @@ class ModelConfig:
         self.dropout = None
         self.state_dict = None
         self.norm_type = None
+        self.attention_type = None
+        self.global_heads_by_layer = None
+        self.local_heads_by_layer = None
+        self.n_global_heads = None
+        self.n_local_heads = None
 
     def with_num_layers(self, num_layers: int) -> Self:
         self.num_layers = num_layers
@@ -77,6 +82,26 @@ class ModelConfig:
         self.norm_type = norm_type
         return self
 
+    def with_attention_type(self, attention_type: AttentionType) -> Self:
+        self.attention_type = attention_type
+        return self
+
+    def with_n_global_heads(self, n_global_heads: int) -> Self:
+        self.n_global_heads = n_global_heads
+        return self
+
+    def with_global_heads_by_layer(self, global_heads_by_layer: List[int]) -> Self:
+        self.global_heads_by_layer = global_heads_by_layer
+        return self
+
+    def with_n_local_heads(self, n_local_heads: int) -> Self:
+        self.n_local_heads = n_local_heads
+        return self
+
+    def with_local_heads_by_layer(self, local_heads_by_layer: List[int]) -> Self:
+        self.local_heads_by_layer = local_heads_by_layer
+        return self
+
     def with_state_dict(self, state_dict: Dict) -> Self:
         self.state_dict = state_dict
         return self
@@ -106,8 +131,22 @@ class ModelConfig:
             raise AttributeError("dropout is not defined for Graphormer")
         if self.norm_type is None:
             raise AttributeError("norm_type is not defined for Graphormer")
-        if self.n_heads is None and self.heads_by_layer is None:
+        if self.attention_type is None:
+            raise AttributeError("attention_type is not defined for Graphormer")
+        if self.n_heads is None and self.heads_by_layer is None and self.attention_type == AttentionType.MHA:
             raise AttributeError("n_heads or heads_by_layer must be defined for Graphormer")
+        if (
+            self.n_global_heads is None
+            and self.global_heads_by_layer is None
+            and self.attention_type == AttentionType.FISH
+        ):
+            raise AttributeError("n_global_heads or global_heads_by_layer must be defined for Graphormer")
+        if (
+            self.n_local_heads is None
+            and self.local_heads_by_layer is None
+            and self.attention_type == AttentionType.FISH
+        ):
+            raise AttributeError("n_local_heads or local_heads_by_layer must be defined for Graphormer")
 
         model = Graphormer(
             num_layers=self.num_layers,
@@ -124,6 +163,11 @@ class ModelConfig:
             max_path_distance=self.max_path_distance,
             dropout=self.dropout,
             norm_type=self.norm_type,
+            attention_type=self.attention_type,
+            n_global_heads=self.n_global_heads,
+            n_local_heads=self.n_local_heads,
+            global_heads_by_layer=self.global_heads_by_layer,
+            local_heads_by_layer=self.local_heads_by_layer,
         )
 
         if self.state_dict is not None:
