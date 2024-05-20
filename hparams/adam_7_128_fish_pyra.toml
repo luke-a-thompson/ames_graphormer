@@ -1,0 +1,52 @@
+# Global settings
+# opt_norm_attn_sched_layers_hidden_epochs_arch
+name = "adam_layer_fish_oc_7_128_1000_pyra_num_3"
+random_state = 7777
+torch_device = "cuda"
+
+# Data settings
+dataset = "honma"
+batch_size = 128
+accumulation_steps = 8
+test_size = 0.8
+
+# Model settings
+num_layers = 7
+hidden_dim = 128
+edge_embedding_dim = 128
+ffn_hidden_dim = 128
+global_heads_by_layer = [32, 16, 8, 4, 2, 1, 1]
+local_heads_by_layer = [64, 32, 16, 8, 4, 2, 1]
+max_in_degree = 5
+max_out_degree = 5
+max_path_distance = 5
+attention_type = "fish"
+norm_type = "layer"
+
+# Optimizer settings
+optimizer_type = "adam"
+lr = 2.5e-3
+b1 = 0.98
+b2 = 0.999
+weight_decay = 0.05
+eps = 1.0e-12
+dropout = 0.1
+clip_grad_norm = 7.0
+
+# Scheduler settings
+lr_max = 1e-02
+scheduler_type = "one-cycle"
+pct_start = 0.1
+anneal_strategy = "cos"
+cycle_momentum = true
+base_momentum = 0.85
+max_momentum = 0.95
+div_factor = 25
+final_div_factor = 1e4
+three_phase = false
+
+# Loss settings
+loss_reduction = "mean"
+# Training settings
+epochs = 1000
+checkpt_save_interval = 1 
