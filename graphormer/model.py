@@ -117,19 +117,34 @@ class Graphormer(nn.Module):
             assert self.n_local_heads is not None
             self.local_heads_by_layer = [self.n_local_heads for _ in range(self.num_layers)]
 
-        return [
-            GraphormerEncoderLayer(
-                hidden_dim=self.hidden_dim,
-                n_global_heads=n_global_heads,
-                n_local_heads=n_local_heads,
-                ffn_dim=self.ffn_hidden_dim,
-                ffn_dropout=self.dropout,
-                attn_dropout=self.dropout,
-                norm_type=self.norm_type,
-                attention_type=self.attention_type,
-            )
-            for n_global_heads, n_local_heads in zip(self.global_heads_by_layer, self.local_heads_by_layer)
-        ]
+        layers = []
+        for n_global_heads, n_local_heads in zip(self.global_heads_by_layer, self.local_heads_by_layer):
+            if n_global_heads != n_local_heads:
+                layers.append(
+                    GraphormerEncoderLayer(
+                        hidden_dim=self.hidden_dim,
+                        n_global_heads=n_global_heads,
+                        n_local_heads=n_local_heads,
+                        ffn_dim=self.ffn_hidden_dim,
+                        ffn_dropout=self.dropout,
+                        attn_dropout=self.dropout,
+                        norm_type=self.norm_type,
+                        attention_type=self.attention_type,
+                    )
+                )
+            else:
+                layers.append(
+                    GraphormerEncoderLayer(
+                        hidden_dim=self.hidden_dim,
+                        n_heads=n_global_heads,
+                        ffn_dim=self.ffn_hidden_dim,
+                        ffn_dropout=self.dropout,
+                        attn_dropout=self.dropout,
+                        norm_type=self.norm_type,
+                        attention_type=AttentionType.MHA,
+                    )
+                )
+        return layers
 
     def mha_layers(
         self,

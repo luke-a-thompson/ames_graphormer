@@ -209,7 +209,6 @@ class GraphormerFishAttention(nn.Module):
         num_local_heads: int,
         hidden_dim: int,
         dropout_rate: float = 0.1,
-        max_seq_len: int = 256,
     ):
         super().__init__()
         self.num_global_heads = num_global_heads
@@ -218,25 +217,24 @@ class GraphormerFishAttention(nn.Module):
         self.scale = hidden_dim**-0.5
         self.hidden_dim = hidden_dim
         assert (
-            hidden_dim % num_global_heads == 0
+            self.hidden_dim % self.num_global_heads == 0
         ), f"hidden_dim {
-            hidden_dim} must be divisible by num_global_heads {num_global_heads}"
+            self.hidden_dim} must be divisible by num_global_heads {self.num_global_heads}"
         assert (
-            num_global_heads <= num_local_heads
-        ), f"num_global_heads {num_global_heads} should be less than num_local_heads {num_local_heads}"
+            self.num_global_heads <= self.num_local_heads
+        ), f"num_global_heads {self.num_global_heads} should be less than num_local_heads {self.num_local_heads}"
 
-        self.head_size = hidden_dim // num_global_heads
-        self.global_q = nn.Linear(hidden_dim, hidden_dim, bias=False)
-        self.global_k = nn.Linear(hidden_dim, hidden_dim, bias=False)
-        self.local_v = nn.Linear(hidden_dim, num_local_heads * self.head_size, bias=True)
+        self.head_size = self.hidden_dim // self.num_global_heads
+        self.global_q = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
+        self.global_k = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
+        self.local_v = nn.Linear(self.hidden_dim, self.num_local_heads * self.head_size, bias=True)
         self.att_dropout = nn.Dropout(dropout_rate)
 
         self.sigma = nn.Parameter(0.1 * torch.ones(self.num_global_heads, requires_grad=True))
-        self.eps = torch.randn(self.num_local_heads, max_seq_len, max_seq_len).diagonal(dim1=-2, dim2=-1).diag_embed()
         self.p = nn.Parameter(torch.randn(self.num_global_heads, self.num_local_heads, requires_grad=True))
-        self.relu = nn.ReLU()
+        self.mish = nn.Mish()
 
-        self.linear_out = nn.Linear(num_local_heads * self.head_size, hidden_dim, bias=True)
+        self.linear_out = nn.Linear(self.num_local_heads * self.head_size, self.hidden_dim, bias=False)
 
     def forward(
         self,
@@ -246,34 +244,56 @@ class GraphormerFishAttention(nn.Module):
     ):
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
+        # (batch_size, 1, max_seq_len, max_seq_len)
         bias = (spatial_encoding + edge_encoding).unsqueeze(1)
 
         global_q_x = (
-            self.global_q(x).view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size).transpose(1, 2)
+            self.global_q(x)
+            .contiguous()
+            .view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size)
+            .transpose(1, 2)
         )
         global_k_x = (
-            self.global_k(x).view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size).transpose(1, 2)
+            self.global_k(x)
+            .contiguous()
+            .view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size)
+            .transpose(1, 2)
         )
-        v_x = self.local_v(x).view(batch_size, max_subgraph_size, self.num_local_heads, self.head_size).transpose(1, 2)
+        v_x = (
+            self.local_v(x)
+            .contiguous()
+            .view(batch_size, max_subgraph_size, self.num_local_heads, self.head_size)
+            .transpose(1, 2)
+        )
         global_k_x_t = global_k_x.transpose(-2, -1)
 
         # (batch_size, num_global_heads, max_seq_len, max_seq_len)
-        g = (global_q_x @ global_k_x_t) * self.scale + bias
+        g_k = global_q_x @ global_k_x_t
+        eps = torch.randn_like(g_k).to(x.device)
 
-        sigma_expanded = self.sigma.square().reshape(self.num_global_heads, 1, 1, 1)
-        # (1, num_global_heads, num_local_heads, max_seq_len, max_seq_len)
-        eps = self.eps[:, :max_subgraph_size, :max_subgraph_size].to(x.device)
-        sigma_eps = (sigma_expanded * eps).unsqueeze(0)
-        # (batch_size, num_global_heads, 1, max_seq_len, max_seq_len)
-        g_k = g.unsqueeze(2)
-        # (batch_size, num_global_heads, num_local_heads, max_seq_len, max_seq_len)
+        # (batch_size, num_global_heads, max_seq_len, max_seq_len)
+        pad_mask = torch.any(g_k != 0, dim=-1, keepdim=True).broadcast_to(
+            batch_size, self.num_global_heads, max_subgraph_size, max_subgraph_size
+        )
+        # (1, num_global_heads, 1, 1)
+        sigma_sq = self.sigma.square().reshape(1, self.num_global_heads, 1, 1).contiguous()
+        # (batch_size, num_global_heads, max_seq_len, max_seq_len)
+        sigma_eps = sigma_sq * eps
         a = g_k + sigma_eps
-        pad_mask = torch.any(g_k != 0, dim=-1, keepdim=True).broadcast_to(a.shape)
-        a = a * self.p.view(1, self.num_global_heads, self.num_local_heads, 1, 1)
-        a[pad_mask] = self.relu(a[pad_mask])
-        a[~pad_mask] = float("-inf")
+        a[~pad_mask] = 0.0
         # (batch_size, num_local_heads, max_seq_len, max_seq_len)
-        a = a.sum(dim=1)
+        # a: batch_size
+        # i: num_global_heads
+        # j: num_local_heads
+        # b,c: max_seq_len
+        a = torch.einsum("aibc,ij->ajbc", a, self.p)
+
+        pad_mask = torch.all(a == 0, dim=-1)
+        a[pad_mask] = float("-inf")
+        a[~pad_mask] = self.mish(a[~pad_mask])
+        a *= self.scale
+        a += bias
+
         a = torch.softmax(a, dim=-1)
         a = torch.nan_to_num(a)
         a @= v_x
