@@ -178,8 +178,7 @@ class GraphormerMultiHeadAttention(nn.Module):
         edge_encoding: torch.Tensor,
     ) -> torch.Tensor:
         """
-        :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim)
-        :param spatial_encoding: spatial encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
+        :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim) :param spatial_encoding: spatial encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
         :param edge_encoding: edge encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
         :return: torch.Tensor, node embeddings after all attention heads
         """
@@ -203,6 +202,14 @@ class GraphormerMultiHeadAttention(nn.Module):
 
 
 class GraphormerFishAttention(nn.Module):
+    """
+    This class implements techniques from the following paper:
+    Tan M. Nguyen, Tam Nguyen, Hai Do, Khai Nguyen, Vishwanath Saragadam, Minh Pham, Duy Khuong Nguyen, Nhat Ho, and Stanley J. Osher.
+    "Improving Transformer with an Admixture of Attention Heads."
+    Proceedings of the 36th Conference on Neural Information Processing Systems (NeurIPS 2022).
+    Available at: https://proceedings.neurips.cc/paper_files/paper/2022/file/b2e4edd53059e24002a0c916d75cc9a3-Paper-Conference.pdf
+    """
+
     def __init__(
         self,
         num_global_heads: int,
@@ -242,6 +249,12 @@ class GraphormerFishAttention(nn.Module):
         spatial_encoding: torch.Tensor,
         edge_encoding: torch.Tensor,
     ):
+        """
+        :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim) :param spatial_encoding: spatial encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
+        :param edge_encoding: edge encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
+        :return: torch.Tensor, node embeddings after all attention heads
+        """
+
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
         # (batch_size, 1, max_seq_len, max_seq_len)
