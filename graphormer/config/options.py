@@ -36,3 +36,4 @@ class NormType(str, Enum):
 class AttentionType(str, Enum):
     MHA = "mha"
     FISH = "fish"
+    LINEAR = "linear"

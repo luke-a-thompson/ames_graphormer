@@ -156,8 +156,79 @@ class GraphormerMultiHeadAttention(nn.Module):
         """
         super().__init__()
         self.num_heads = num_heads
+        self.hidden_dim = hidden_dim
 
-        self.scale = hidden_dim**-0.5
+        self.scale = self.hidden_dim**-0.5
+        assert (
+            self.hidden_dim % self.num_heads == 0
+        ), f"hidden_dim {
+            self.hidden_dim} must be divisible by num_heads {self.num_heads}"
+        self.head_size = self.hidden_dim // self.num_heads
+        self.linear_q = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
+        self.linear_k = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
+        self.linear_v = nn.Linear(self.hidden_dim, self.hidden_dim, bias=True)
+        self.att_dropout = nn.Dropout(dropout_rate)
+
+        self.linear_out = nn.Linear(self.hidden_dim, self.hidden_dim, bias=True)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        encoding_bias: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim)
+        :param encoding_bias: spatial encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
+        :return: torch.Tensor, node embeddings after all attention heads
+        """
+        batch_size = x.shape[0]
+        max_subgraph_size = x.shape[1]
+        bias = encoding_bias.view(batch_size, 1, max_subgraph_size, max_subgraph_size)
+
+        q_x = self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size)
+        k_x = self.linear_k(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size)
+        v_x = self.linear_v(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size)
+
+        # b: batch_size
+        # n, m: max_subgraph_size
+        # h: num_heads
+        # d: head_size
+        # (batch_size, num_heads, head_size, max_subgraph_size, max_subgraph_size)
+        a = torch.einsum("bnhd,bmhd->bhnm", q_x, k_x) * self.scale + bias
+        pad_mask = torch.all(a == 0, dim=-1)
+        a[pad_mask] = float("-inf")
+        a = torch.softmax(a, dim=-1)
+        a = torch.nan_to_num(a)
+        # b: batch_size
+        # n, m: max_subgraph_size
+        # h: num_heads
+        # d: head_size
+        # (batch_size, max_subgraph_size, num_heads, head_size)
+        a = torch.einsum("bhnm,bmhd->bnhd", a, v_x)
+        a = self.att_dropout(a)
+        attn = a.contiguous().view(batch_size, max_subgraph_size, self.num_heads * self.head_size)
+        return self.linear_out(attn)
+
+
+class GraphormerLinearAttention(nn.Module):
+    """
+    @inproceedings{katharopoulos_et_al_2020,
+        author = {Katharopoulos, A. and Vyas, A. and Pappas, N. and Fleuret, F.},
+        title = {Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention},
+        booktitle = {Proceedings of the International Conference on Machine Learning (ICML)},
+        year = {2020}
+    }
+    """
+
+    def __init__(self, num_heads: int, hidden_dim: int, dropout_rate: float = 0.1, eps: float = 1e-09):
+        """
+        :param num_heads: number of attention heads
+        :param d_x: node feature matrix input number of dimension
+        :param edge_dim: edge feature matrix number of dimension
+        """
+        super().__init__()
+        self.num_heads = num_heads
+
         self.hidden_dim = hidden_dim
         assert (
             hidden_dim % num_heads == 0
@@ -168,36 +239,63 @@ class GraphormerMultiHeadAttention(nn.Module):
         self.linear_k = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.linear_v = nn.Linear(hidden_dim, hidden_dim, bias=True)
         self.att_dropout = nn.Dropout(dropout_rate)
+        self.elu = nn.ELU()
+        self.feature_map = lambda x: self.elu(x) + 1.0
+        self.eps = eps
 
         self.linear_out = nn.Linear(hidden_dim, hidden_dim, bias=True)
 
     def forward(
         self,
         x: torch.Tensor,
-        spatial_encoding: torch.Tensor,
-        edge_encoding: torch.Tensor,
+        encoding_bias: torch.Tensor,
     ) -> torch.Tensor:
         """
-        :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim) :param spatial_encoding: spatial encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
-        :param edge_encoding: edge encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
-        :return: torch.Tensor, node embeddings after all attention heads
+        :param x: input, shape (batch_size, max_subgraph_size, node_embed_dim)
+        :param encoding_bias: the bias term, shape (batch_size, max_subgraph_size, max_subgraph_size)
         """
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
-        bias = (spatial_encoding + edge_encoding).unsqueeze(1)
+        # (batch_size, max_subgraph_size, 1, 1)
+        bias = encoding_bias.mean(dim=-1).view(batch_size, max_subgraph_size, 1, 1)
 
-        q_x = self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).transpose(1, 2)
-        k_x = self.linear_k(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).transpose(1, 2)
-        v_x = self.linear_v(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size).transpose(1, 2)
-        k_x_t = k_x.transpose(-2, -1)
-        a = (q_x @ k_x_t) * self.scale + bias
-        pad_mask = torch.any(a != 0, dim=-1)
-        a[~pad_mask] = float("-inf")
-        a = torch.softmax(a, dim=-1)
-        a = torch.nan_to_num(a)
-        a @= v_x
-        a = self.att_dropout(a)
-        attn = a.transpose(1, 2).contiguous().view(batch_size, max_subgraph_size, self.hidden_dim)
+        q_x = self.feature_map(
+            self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size) + bias
+        ).contiguous()
+        padding_mask = torch.all(q_x == 0, dim=-1)
+        k_x = self.feature_map(
+            self.linear_k(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size)
+        ).contiguous()
+        v_x = self.feature_map(
+            self.linear_v(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size)
+        ).contiguous()
+
+        # b: batch_size
+        # n: max_subgraph_size
+        # h: num_heads
+        # d: k_head_size
+        # m: v_head_size
+        # (batch_size, num_heads, v_head_size, k_head_size)
+        k_v = torch.einsum("bnhd,bnhm->bhmd", k_x, v_x)
+
+        # b: batch_size
+        # n: max_subgraph_size
+        # h: num_heads
+        # d: head_size
+        # (batch_size, max_subgraph_size, num_heads)
+        z = (torch.einsum("bnhd,bhd->bnh", q_x, k_x.sum(dim=1)) + self.eps).reciprocal()
+
+        # b: batch_size
+        # n: max_subgraph_size
+        # h: num_heads
+        # d: head_size
+        # m: v_head_size
+        # (batch_size, max_subgraph_size, num_heads, v_head_size)
+        attn = torch.einsum("bnhd,bhmd,bnh->bnhm", q_x, k_v, z)
+        attn[padding_mask] = 0.0
+
+        attn = self.att_dropout(attn)
+        attn = attn.contiguous().view(batch_size, max_subgraph_size, self.num_heads * self.head_size)
         return self.linear_out(attn)
 
 
@@ -246,8 +344,7 @@ class GraphormerFishAttention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        spatial_encoding: torch.Tensor,
-        edge_encoding: torch.Tensor,
+        encoding_bias: torch.Tensor,
     ):
         """
         :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim) :param spatial_encoding: spatial encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
@@ -258,48 +355,37 @@ class GraphormerFishAttention(nn.Module):
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
         # (batch_size, 1, max_seq_len, max_seq_len)
-        bias = (spatial_encoding + edge_encoding).unsqueeze(1)
+        bias = encoding_bias.view(batch_size, 1, max_subgraph_size, max_subgraph_size).contiguous()
 
         global_q_x = (
-            self.global_q(x)
-            .contiguous()
-            .view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size)
-            .transpose(1, 2)
+            self.global_q(x).contiguous().view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size)
         )
         global_k_x = (
-            self.global_k(x)
-            .contiguous()
-            .view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size)
-            .transpose(1, 2)
+            self.global_k(x).contiguous().view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size)
         )
-        v_x = (
-            self.local_v(x)
-            .contiguous()
-            .view(batch_size, max_subgraph_size, self.num_local_heads, self.head_size)
-            .transpose(1, 2)
-        )
-        global_k_x_t = global_k_x.transpose(-2, -1)
+        v_x = self.local_v(x).contiguous().view(batch_size, max_subgraph_size, self.num_local_heads, self.head_size)
 
+        # b: batch_size
+        # n, m: max_subgraph_size
+        # g: num_global_heads
         # (batch_size, num_global_heads, max_seq_len, max_seq_len)
-        g_k = global_q_x @ global_k_x_t
+        g_k = torch.einsum("bngd,bmgd->bgnm", global_q_x, global_k_x)
         eps = torch.randn_like(g_k).to(x.device)
-
-        # (batch_size, num_global_heads, max_seq_len, max_seq_len)
-        pad_mask = torch.any(g_k != 0, dim=-1, keepdim=True).broadcast_to(
-            batch_size, self.num_global_heads, max_subgraph_size, max_subgraph_size
-        )
+        pad_mask = torch.all(g_k == 0, dim=-1)
         # (1, num_global_heads, 1, 1)
         sigma_sq = self.sigma.square().reshape(1, self.num_global_heads, 1, 1).contiguous()
-        # (batch_size, num_global_heads, max_seq_len, max_seq_len)
+        # (batch_size, num_global_heads, head_size, max_seq_len, max_seq_len)
         sigma_eps = sigma_sq * eps
         a = g_k + sigma_eps
-        a[~pad_mask] = 0.0
+        a[pad_mask, :] = 0.0
+
+        # b: batch_size
+        # n, m: max_subgraph_size
+        # g: num_global_heads
+        # l: num_local_heads
+        # d: head_size
         # (batch_size, num_local_heads, max_seq_len, max_seq_len)
-        # a: batch_size
-        # i: num_global_heads
-        # j: num_local_heads
-        # b,c: max_seq_len
-        a = torch.einsum("aibc,ij->ajbc", a, self.p)
+        a = torch.einsum("bgnm,gl->blnm", a, self.p)
 
         pad_mask = torch.all(a == 0, dim=-1)
         a[pad_mask] = float("-inf")
@@ -309,9 +395,15 @@ class GraphormerFishAttention(nn.Module):
 
         a = torch.softmax(a, dim=-1)
         a = torch.nan_to_num(a)
-        a @= v_x
+        # b: batch_size
+        # n, m: max_subgraph_size
+        # g: num_global_heads
+        # l: num_local_heads
+        # d: head_size
+        # (batch_size, max_subgraph_size, num_local_heads, head_size)
+        a = torch.einsum("blnm,bmld->bnld", a, v_x)
         a = self.att_dropout(a)
-        attn = a.transpose(1, 2).contiguous().view(batch_size, max_subgraph_size, self.num_local_heads * self.head_size)
+        attn = a.reshape(batch_size, max_subgraph_size, self.num_local_heads * self.head_size).contiguous()
         return self.linear_out(attn)
 
 
@@ -352,6 +444,15 @@ class GraphormerEncoderLayer(nn.Module):
                     hidden_dim=self.hidden_dim,
                     dropout_rate=self.attn_dropout,
                 )
+            case AttentionType.LINEAR:
+                if self.n_heads is None:
+                    raise AttributeError("n_heads must be defined for GraphormerMultiHeadAttention")
+                self.attention = GraphormerLinearAttention(
+                    num_heads=self.n_heads,
+                    hidden_dim=self.hidden_dim,
+                    dropout_rate=self.attn_dropout,
+                )
+
             case AttentionType.FISH:
                 if self.n_global_heads is None:
                     raise AttributeError("n_global_heads must be defined for GraphormerFishAttention")
@@ -386,8 +487,7 @@ class GraphormerEncoderLayer(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        spatial_encoding: torch.Tensor,
-        edge_encoding: torch.Tensor,
+        encoding_bias: torch.Tensor,
     ) -> torch.Tensor:
         """
         Implements forward pass of the Graphormer encoder layer.
@@ -408,7 +508,7 @@ class GraphormerEncoderLayer(nn.Module):
         :return: torch.Tensor, node embeddings after Graphormer layer operations
         """
         att_input = self.n1(x)
-        att_output = self.attention(att_input, spatial_encoding, edge_encoding) + x
+        att_output = self.attention(att_input, encoding_bias) + x
         pad_mask = torch.any(att_output == 0, dim=-1)
 
         ffn_input = self.n2(x)

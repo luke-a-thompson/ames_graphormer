@@ -7,7 +7,7 @@ from graphormer.layers import CentralityEncoding, EdgeEncoding, GraphormerEncode
 from graphormer.config.options import NormType, AttentionType
 
 import warnings
-from torch.jit import TracerWarning
+from torch.jit import TracerWarning  # type: ignore
 
 warnings.filterwarnings("ignore", category=TracerWarning)
 
@@ -87,7 +87,7 @@ class Graphormer(nn.Module):
 
         layers = None
         match self.attention_type:
-            case AttentionType.MHA:
+            case AttentionType.MHA | AttentionType.LINEAR:
                 layers = self.mha_layers()
             case AttentionType.FISH:
                 layers = self.fish_layers()
@@ -260,10 +260,11 @@ class Graphormer(nn.Module):
         x = rnn.pad_sequence(subgraphs, batch_first=True)
         padded_spatial_subgraphs = torch.cat(spatial_subgraphs).to(x.device)
         padded_edge_subgraphs = torch.cat(edge_subgraphs).to(x.device)
+        padded_encoding_bias = padded_spatial_subgraphs + padded_edge_subgraphs
         padded_mask = torch.all(x == 0, dim=-1)
 
         for layer in self.layers:
-            x = layer(x, padded_spatial_subgraphs, padded_edge_subgraphs)
+            x = layer(x, padded_encoding_bias)
 
         x = x.flatten(0, 1)[~padded_mask.flatten()]
         # Output for each VNODE for each graph
