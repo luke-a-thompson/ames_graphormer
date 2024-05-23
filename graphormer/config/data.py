@@ -17,6 +17,8 @@ class DataConfig:
         self.num_node_features = None
         self.num_edge_features = None
         self.num_classes = None
+        self.num_workers = 4
+        self.prefetch_factor = 4
 
     def with_random_state(self, random_state: int) -> Self:
         self.random_state = random_state
@@ -26,11 +28,20 @@ class DataConfig:
         self.test_size = test_size
         return self
 
+    def with_num_workers(self, num_workers: int) -> Self:
+        self.num_workers = num_workers
+        return self
+
+    def with_prefetch_factor(self, prefect_factor: int) -> Self:
+        self.prefetch_factor = prefect_factor
+        return self
+
     def build(self) -> Tuple[DataLoader, DataLoader]:
+
         dataloader_optimization_params = {
             "pin_memory": True,
-            "num_workers": 4,
-            "prefetch_factor": 4,
+            "num_workers": self.num_workers,
+            "prefetch_factor": self.prefetch_factor,
             "persistent_workers": True,
         }
         match self.dataset_type:

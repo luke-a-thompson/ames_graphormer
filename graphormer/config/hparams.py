@@ -37,6 +37,8 @@ class HyperparameterConfig:
         output_dim: Optional[int] = None,
         test_size: Optional[float] = None,
         tune_size: float = 1.0,
+        num_workers: Optional[int] = None,
+        prefetch_factor: Optional[int] = None,
         # Model Parameters
         num_layers: Optional[int] = None,
         hidden_dim: Optional[int] = None,
@@ -174,6 +176,9 @@ class HyperparameterConfig:
         self.dropout = dropout
         self.norm_type = norm_type
         self.attention_type = attention_type
+        self.num_workers = num_workers
+        self.prefetch_factor = prefetch_factor
+
         self.model_state_dict = None
         self.optimizer_state_dict = None
         self.scheduler_state_dict = None
@@ -195,6 +200,10 @@ class HyperparameterConfig:
             config = config.with_test_size(self.test_size)
         if self.random_state is not None:
             config = config.with_random_state(self.random_state)
+        if self.num_workers is not None:
+            config = config.with_num_workers(self.num_workers)
+        if self.prefetch_factor is not None:
+            config = config.with_prefetch_factor(self.prefetch_factor)
 
         return config
 
