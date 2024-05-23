@@ -88,14 +88,13 @@ def train_model(
             if train_batch_num == 0 and trial is None:
                 writer.add_graph(
                     model,
-                    [batch.x, batch.edge_index, batch.edge_attr, batch.ptr, batch.node_paths, batch.edge_paths],
+                    [batch.x, batch.edge_index, batch.edge_attr, batch.node_paths, batch.edge_paths],
                 )
 
             output = model(
                 batch.x,
                 batch.edge_index,
                 batch.edge_attr,
-                batch.ptr,
                 batch.node_paths,
                 batch.edge_paths,
             )
@@ -160,7 +159,6 @@ def train_model(
                     batch.x,
                     batch.edge_index,
                     batch.edge_attr,
-                    batch.ptr,
                     batch.node_paths,
                     batch.edge_paths,
                 )

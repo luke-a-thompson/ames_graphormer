@@ -1,5 +1,5 @@
 from typing import Dict, List, Self
-from graphormer.model import Graphormer
+from graphormer.modules.model import Graphormer
 from graphormer.config.options import AttentionType, NormType
 
 

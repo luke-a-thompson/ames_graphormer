@@ -3,7 +3,8 @@ import torch
 import torch.nn.utils.rnn as rnn
 from torch import nn
 
-from graphormer.layers import CentralityEncoding, EdgeEncoding, GraphormerEncoderLayer, SpatialEncoding
+from graphormer.modules.encoding import CentralityEncoding, EdgeEncoding, SpatialEncoding
+from graphormer.modules.layers import GraphormerEncoderLayer
 from graphormer.config.options import NormType, AttentionType
 
 import warnings
@@ -185,7 +186,6 @@ class Graphormer(nn.Module):
         x: torch.Tensor,
         edge_index: torch.Tensor,
         edge_attr: torch.Tensor,
-        ptr: torch.Tensor,
         node_paths: torch.Tensor,
         edge_paths: torch.Tensor,
     ) -> torch.Tensor:
@@ -199,41 +199,9 @@ class Graphormer(nn.Module):
         :return: torch.Tensor, output node embeddings
         """
 
-        x = x.float()
-
-        node_subgraphs = []
-        edge_index_subgraphs = []
-        edge_attr_subgraphs = []
-        node_paths_subgraphs = []
-        edge_paths_subgraphs = []
-        subgraph_idxs = torch.stack([ptr[:-1], ptr[1:]], dim=1)
-        subgraph_sq_ptr = torch.cat(
-            [torch.tensor([0]).to(x.device), (subgraph_idxs[:, 1] - subgraph_idxs[:, 0]).square().cumsum(dim=0)]
-        )
-        subgraph_idxs_sq = torch.stack([subgraph_sq_ptr[:-1], subgraph_sq_ptr[1:]], dim=1)
-        for idx_range, idx_range_sq in zip(subgraph_idxs.tolist(), subgraph_idxs_sq.tolist()):
-            subgraph = x[idx_range[0] : idx_range[1]]
-            node_subgraphs.append(subgraph)
-            start_edge_index = (edge_index[0] < idx_range[0]).sum()
-            stop_edge_index = (edge_index[0] < idx_range[1]).sum()
-            start_node_index = idx_range[0]
-            edge_index_subgraphs.append(
-                (edge_index[:, start_edge_index:stop_edge_index] - start_node_index).transpose(0, 1)
-            )
-            edge_attr_subgraphs.append(edge_attr[start_edge_index:stop_edge_index, :])
-            node_paths_subgraphs.append(node_paths[idx_range_sq[0] : idx_range_sq[1]])
-            edge_paths_subgraphs.append(edge_paths[idx_range_sq[0] : idx_range_sq[1]])
-
-        # (batch_size, max_num_nodes, node_feature_dim)
-        x = rnn.pad_sequence(node_subgraphs, batch_first=True)
-        edge_index = rnn.pad_sequence(edge_index_subgraphs, batch_first=True, padding_value=-1).transpose(1, 2)
-        edge_attr = rnn.pad_sequence(edge_attr_subgraphs, batch_first=True, padding_value=-1)
-        node_paths = rnn.pad_sequence(node_paths_subgraphs, batch_first=True, padding_value=-1)
-        edge_paths = rnn.pad_sequence(edge_paths_subgraphs, batch_first=True, padding_value=-1)
         x = self.node_embedding(x)
-        x = self.centrality_encoding(x, edge_index.long())
+        x = self.centrality_encoding(x, edge_index)
 
-        edge_attr = edge_attr.float()
         edge_embedding = self.edge_embedding(edge_attr)
         spatial_encoding = self.spatial_encoding(x, node_paths)
         edge_encoding = self.edge_encoding(edge_embedding, edge_paths)

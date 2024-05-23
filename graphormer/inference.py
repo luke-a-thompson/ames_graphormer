@@ -3,7 +3,7 @@ from typing import Optional
 from graphormer.config.hparams import HyperparameterConfig
 from torch_geometric.loader import DataLoader
 from graphormer.config.data import DataConfig
-from graphormer.model import Graphormer
+from graphormer.modules.model import Graphormer
 from graphormer.config.utils import model_init_print
 from tqdm import tqdm
 from typing import Dict, List
@@ -56,7 +56,6 @@ def inference_model(
                         batch.x,
                         batch.edge_index,
                         batch.edge_attr,
-                        batch.ptr,
                         batch.node_paths,
                         batch.edge_paths,
                     )
@@ -83,7 +82,6 @@ def inference_model(
                 batch.x,
                 batch.edge_index,
                 batch.edge_attr,
-                batch.ptr,
                 batch.node_paths,
                 batch.edge_paths,
             )

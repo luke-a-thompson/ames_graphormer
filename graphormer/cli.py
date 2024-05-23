@@ -103,6 +103,7 @@ def configure(ctx, param, filename):
 @click.option("--n_local_heads", default=8)
 @click.option("--global_heads_by_layer", multiple=True, default=[], type=click.INT)
 @click.option("--local_heads_by_layer", multiple=True, default=[], type=click.INT)
+@click.option("--flush_secs", default=5)
 def train(**kwargs):
     hparam_config = HyperparameterConfig(**kwargs)
     hparam_config.load_from_checkpoint()
