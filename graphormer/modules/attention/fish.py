@@ -1,4 +1,5 @@
 import torch
+import torch.autograd as autograd
 import torch.nn as nn
 
 
@@ -50,7 +51,8 @@ class GraphormerFishAttention(nn.Module):
         encoding_bias: torch.Tensor,
     ):
         """
-        :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim) :param spatial_encoding: spatial encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
+        :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim)
+        :param spatial_encoding: spatial encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
         :param edge_encoding: edge encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
         :return: torch.Tensor, node embeddings after all attention heads
         """
@@ -91,13 +93,14 @@ class GraphormerFishAttention(nn.Module):
         a = torch.einsum("bgnm,gl->blnm", a, self.p)
 
         pad_mask = torch.all(a == 0, dim=-1)
-        a[pad_mask] = float("-inf")
-        a[~pad_mask] = self.mish(a[~pad_mask])
+        a = self.mish(a)
         a *= self.scale
         a += bias
 
+        a[pad_mask] = float("-inf")
         a = torch.softmax(a, dim=-1)
         a = torch.nan_to_num(a)
+
         # b: batch_size
         # n, m: max_subgraph_size
         # g: num_global_heads

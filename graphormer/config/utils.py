@@ -3,6 +3,7 @@ import torch
 from torch.nn.modules.loss import _Loss
 from torch_geometric.loader import DataLoader
 from graphormer.config.hparams import HyperparameterConfig
+from tqdm import tqdm
 
 
 def save_checkpoint(
@@ -107,7 +108,8 @@ def model_init_print(
 def calculate_pos_weight(loader: DataLoader):
     num_neg_samples = 0
     num_pos_samples = 0
-    for sample in loader:
+    print("Calculating positive weight...")
+    for sample in tqdm(loader):
         num_pos_samples += torch.sum(sample.y).item()
         num_neg_samples += torch.sum(sample.y == 0).item()
     return torch.tensor([num_neg_samples / num_pos_samples])

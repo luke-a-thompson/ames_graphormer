@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch_geometric.utils import degree
 
 
 class CentralityEncoding(nn.Module):
@@ -17,26 +16,26 @@ class CentralityEncoding(nn.Module):
         self.z_in = nn.Parameter(torch.randn((max_in_degree, hidden_dim)))
         self.z_out = nn.Parameter(torch.randn((max_out_degree, hidden_dim)))
 
-    def forward(self, x: torch.Tensor, edge_index: torch.LongTensor) -> torch.Tensor:
+    def forward(self, degrees: torch.LongTensor) -> torch.Tensor:
         """
-        :param x: node embedding (batch_size, max_subgraph_size, node_embedding_dim)
-        :param edge_index: edge_index of graph (adjacency list)
-        :return: torch.Tensor, node embeddings after Centrality encoding
+        :param degrees: degrees of graph (batch_size, 2, num_nodes)
+        :return: torch.Tensor, centrality encoding (batch_size, num_nodes, hidden_dim)
         """
-        num_nodes = x.shape[1]
-        in_pad_mask = edge_index[:, 1] == -1
-        out_pad_mask = edge_index[:, 0] == -1
+        centrality_encoding = torch.zeros(degrees.shape[0], degrees.shape[2], self.hidden_dim).to(degrees.device)
+        pad_mask = (degrees == -1)[:, 0]
 
         in_degree = torch.clamp_max(
-            degree(index=edge_index[:, 1][~in_pad_mask], num_nodes=num_nodes).long(),
+            degrees[:, 1],
             self.max_in_degree - 1,
         )
         out_degree = torch.clamp_max(
-            degree(index=edge_index[:, 0][~out_pad_mask], num_nodes=num_nodes).long(),
+            degrees[:, 0],
             self.max_out_degree - 1,
         )
 
-        # Exclude adding any centrality info to the VNODE
-        x[:, 1:] += self.z_in[in_degree][1:] + self.z_out[out_degree][1:]
+        z_in = self.z_in[in_degree[~pad_mask]]
+        z_out = self.z_out[out_degree[~pad_mask]]
 
-        return x
+        centrality_encoding[~pad_mask] = z_in + z_out
+
+        return centrality_encoding

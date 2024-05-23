@@ -77,6 +77,7 @@ def train_model(
         progress_bar.set_description(f"Epoch {epoch+1}/{epochs} Train")
 
         model.train()
+
         avg_loss = 0.0
         train_batch_num = epoch * train_batches_per_epoch
         for batch_idx, batch in enumerate(train_loader):
@@ -88,12 +89,13 @@ def train_model(
             if train_batch_num == 0 and trial is None:
                 writer.add_graph(
                     model,
-                    [batch.x, batch.edge_index, batch.edge_attr, batch.node_paths, batch.edge_paths],
+                    [batch.x, batch.degrees, batch.edge_attr, batch.node_paths, batch.edge_paths],
                 )
+                optimizer.zero_grad()
 
             output = model(
                 batch.x,
-                batch.edge_index,
+                batch.degrees,
                 batch.edge_attr,
                 batch.node_paths,
                 batch.edge_paths,
@@ -104,7 +106,6 @@ def train_model(
             loss.backward()
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), hparam_config.clip_grad_norm, error_if_nonfinite=True)
-
             # FIX: Fix scaling of the last batch
             if should_step(batch_idx, accumulation_steps, train_batches_per_epoch):
                 optimizer.step()
@@ -157,7 +158,7 @@ def train_model(
             with torch.no_grad():
                 output = model(
                     batch.x,
-                    batch.edge_index,
+                    batch.degrees,
                     batch.edge_attr,
                     batch.node_paths,
                     batch.edge_paths,

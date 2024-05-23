@@ -1,7 +1,7 @@
 from typing import List, Optional
 import torch
-import torch.nn.utils.rnn as rnn
 from torch import nn
+import torch.autograd as autograd
 
 from graphormer.modules.encoding import CentralityEncoding, EdgeEncoding, SpatialEncoding
 from graphormer.modules.layers import GraphormerEncoderLayer
@@ -184,14 +184,14 @@ class Graphormer(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        edge_index: torch.Tensor,
+        degrees: torch.Tensor,
         edge_attr: torch.Tensor,
         node_paths: torch.Tensor,
         edge_paths: torch.Tensor,
     ) -> torch.Tensor:
         """
         :param x: A list of nodes and their corresponding input features
-        :param edge_index: Two lists of nodes, where pair of matching indices represents an edge
+        :param degrees: A list of the node degrees for each node in the subgraph
         :param edge_attr: A list of all the edges in the batch and their corresponding features
         :param ptr: A set of half-open ranges, where each range indicates the specific index of the starting node of the graph in the batch
         :param node_paths: The paths from each node in the subgraph to every other node in the subgraph as defined by the node indices.
@@ -199,14 +199,19 @@ class Graphormer(nn.Module):
         :return: torch.Tensor, output node embeddings
         """
 
+        x_pad_mask = torch.all(x == -2, dim=-1)
         x = self.node_embedding(x)
-        x = self.centrality_encoding(x, edge_index)
+        x[x_pad_mask] = (torch.ones(self.hidden_dim) * -2).to(x.device)
+        # Exlcude centrality encoding info from VNODE
+        x[:, 1:] += self.centrality_encoding(degrees)[:, 1:]
 
         edge_embedding = self.edge_embedding(edge_attr)
         spatial_encoding = self.spatial_encoding(x, node_paths)
         edge_encoding = self.edge_encoding(edge_embedding, edge_paths)
 
         padded_encoding_bias = spatial_encoding + edge_encoding
+
+        x[x_pad_mask] = torch.zeros(self.hidden_dim).to(x.device)
 
         for layer in self.layers:
             x = layer(x, padded_encoding_bias)

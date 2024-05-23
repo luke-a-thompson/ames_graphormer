@@ -114,10 +114,8 @@ class GraphormerEncoderLayer(nn.Module):
         """
         att_input = self.n1(x)
         att_output = self.attention(att_input, encoding_bias) + x
-        pad_mask = torch.any(att_output == 0, dim=-1)
 
         ffn_input = self.n2(x)
         ffn_output = self.ffn(ffn_input) + att_output
-        ffn_output[pad_mask] = 0
 
         return ffn_output

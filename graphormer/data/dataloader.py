@@ -35,6 +35,7 @@ class GraphormerBatch(Data):
     def __init__(self, *args, **kwargs):
         self.node_paths: Optional[torch.Tensor] = None
         self.edge_paths: Optional[torch.Tensor] = None
+        self.degrees: Optional[torch.Tensor] = None
         super().__init__(*args, **kwargs)
 
 
@@ -47,11 +48,13 @@ class GraphormerCollater(Collater):
         assert data.edge_attr is not None
         assert data.node_paths is not None
         assert data.edge_paths is not None
+        assert data.degrees is not None
         x = data.x.float()
         edge_index = data.edge_index
         edge_attr = data.edge_attr.float()
         node_paths = data.node_paths
         edge_paths = data.edge_paths
+        degrees = data.degrees
         ptr = data.ptr
 
         node_subgraphs = []
@@ -59,6 +62,7 @@ class GraphormerCollater(Collater):
         edge_attr_subgraphs = []
         node_paths_subgraphs = []
         edge_paths_subgraphs = []
+        degree_subgraphs = []
         subgraph_idxs = torch.stack([ptr[:-1], ptr[1:]], dim=1)
         subgraph_sq_ptr = torch.cat(
             [torch.tensor([0]).to(x.device), (subgraph_idxs[:, 1] - subgraph_idxs[:, 0]).square().cumsum(dim=0)]
@@ -67,6 +71,7 @@ class GraphormerCollater(Collater):
         for idx_range, idx_range_sq in zip(subgraph_idxs.tolist(), subgraph_idxs_sq.tolist()):
             subgraph = x[idx_range[0] : idx_range[1]]
             node_subgraphs.append(subgraph)
+            degree_subgraphs.append(degrees[idx_range[0] : idx_range[1], :])
             start_edge_index = (edge_index[0] < idx_range[0]).sum()
             stop_edge_index = (edge_index[0] < idx_range[1]).sum()
             start_node_index = idx_range[0]
@@ -77,10 +82,12 @@ class GraphormerCollater(Collater):
             node_paths_subgraphs.append(node_paths[idx_range_sq[0] : idx_range_sq[1]])
             edge_paths_subgraphs.append(edge_paths[idx_range_sq[0] : idx_range_sq[1]])
 
-        data.x = rnn.pad_sequence(node_subgraphs, batch_first=True)
+        data.x = rnn.pad_sequence(node_subgraphs, batch_first=True, padding_value=-2)
+        data.degrees = rnn.pad_sequence(degree_subgraphs, batch_first=True, padding_value=-1).transpose(1, 2).long()
         data.edge_index = (
             rnn.pad_sequence(edge_index_subgraphs, batch_first=True, padding_value=-1).transpose(1, 2).long()
         )
+        assert data.x.shape[1] == data.degrees.shape[2]
         data.edge_attr = rnn.pad_sequence(edge_attr_subgraphs, batch_first=True, padding_value=-1)
         data.node_paths = rnn.pad_sequence(node_paths_subgraphs, batch_first=True, padding_value=-1)
         data.edge_paths = rnn.pad_sequence(edge_paths_subgraphs, batch_first=True, padding_value=-1)
