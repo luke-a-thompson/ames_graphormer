@@ -5,7 +5,6 @@ from torch_geometric.utils import from_smiles
 
 from graphormer.functional import shortest_path_distance
 from rdkit import Chem
-from rdkit.Chem import QED
 from tqdm import tqdm
 
 
@@ -59,30 +58,7 @@ class HonmaDataset(InMemoryDataset):
                 warnings.append(warning)
                 continue
 
-            data = from_smiles(smiles)
-            data.y = label
-            node_paths, edge_paths, extra_edge_idxs = shortest_path_distance(data.edge_index, self.max_distance)
-
-            data.x = torch.cat((torch.ones(1, data.x.shape[1]) * -1, data.x), dim=0)
-            new_idxs = torch.stack((torch.zeros(data.x.shape[0]), torch.arange(0, data.x.shape[0])), dim=0).transpose(
-                0, 1
-            )
-
-            data.edge_index = torch.cat((new_idxs, data.edge_index.transpose(0, 1)), dim=0).transpose(0, 1)
-            data.node_paths = node_paths
-            data.edge_paths = edge_paths
-            data.edge_attr = torch.cat(
-                (
-                    torch.ones(1, data.edge_attr.shape[1]) * -1,
-                    data.edge_attr,
-                    torch.ones(extra_edge_idxs.shape[0], data.edge_attr.shape[1]) * -1,
-                ),
-                dim=0,
-            )
-
-            assert data.edge_attr.shape[0] - 1 == torch.max(
-                data.edge_paths
-            ), f"Missing edge attrs for graph!  edge_attr.shape: {data.edge_attr.shape}, max_edge_index: {torch.max(data.edge_paths)}"
+            data = process(smiles, label, self.max_distance)
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
@@ -131,12 +107,7 @@ class HansenDataset(InMemoryDataset):
                 warnings.append(warning)
                 continue
 
-            data = from_smiles(smiles)
-            data.y = label
-            node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
-            data.node_paths = node_paths
-            data.edge_paths = edge_paths
-            # data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
+            data = process(smiles, label, self.max_distance)
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
@@ -185,12 +156,7 @@ class CombinedDataset(InMemoryDataset):
                 warnings.append(warning)
                 continue
 
-            data = from_smiles(smiles)
-            data.y = label
-            node_paths, edge_paths = shortest_path_distance(data.edge_index, self.max_distance)
-            data.node_paths = node_paths
-            data.edge_paths = edge_paths
-            # data.graph_feats = torch.tensor(QED.properties(Chem.MolFromSmiles(smiles))).unsqueeze(0)
+            data = process(smiles, label, self.max_distance)
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
@@ -198,6 +164,32 @@ class CombinedDataset(InMemoryDataset):
         # Print all warnings at the end
         for warning in warnings:
             print(warning)
+
+
+def process(smiles, label, max_distance):
+    data = from_smiles(smiles)
+    data.y = label
+    node_paths, edge_paths, extra_edge_idxs = shortest_path_distance(data.edge_index, max_distance)
+
+    data.x = torch.cat((torch.ones(1, data.x.shape[1]) * -1, data.x), dim=0)
+    new_idxs = torch.stack((torch.zeros(data.x.shape[0]), torch.arange(0, data.x.shape[0])), dim=0).transpose(0, 1)
+
+    data.edge_index = torch.cat((new_idxs, data.edge_index.transpose(0, 1)), dim=0).transpose(0, 1)
+    data.node_paths = node_paths
+    data.edge_paths = edge_paths
+    data.edge_attr = torch.cat(
+        (
+            torch.ones(1, data.edge_attr.shape[1]) * -1,
+            data.edge_attr,
+            torch.ones(extra_edge_idxs.shape[0], data.edge_attr.shape[1]) * -1,
+        ),
+        dim=0,
+    )
+
+    assert data.edge_attr.shape[0] - 1 == torch.max(
+        data.edge_paths
+    ), f"Missing edge attrs for graph!  edge_attr.shape: {data.edge_attr.shape}, max_edge_index: {torch.max(data.edge_paths)}"
+    return data
 
 
 if __name__ == "__main__":
