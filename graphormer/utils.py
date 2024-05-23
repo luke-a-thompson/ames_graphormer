@@ -1,10 +1,4 @@
 import torch
-import torch.nn as nn
-
-
-def decrease_to_max_value(x, max_value):
-    x[x > max_value] = max_value
-    return x
 
 
 def difference_idxs(a, b, epsilon=1e-6) -> torch.Tensor:
@@ -19,5 +13,7 @@ def difference_idxs(a, b, epsilon=1e-6) -> torch.Tensor:
         )
     return indices
 
+
 def parse_models(ctx, param, value):
-    return value.split(',')
+    return value.split(",")
+

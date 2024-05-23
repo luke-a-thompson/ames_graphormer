@@ -4,7 +4,6 @@ from torch import nn
 from torch_geometric.utils import degree
 
 from graphormer.norm import CRMSNorm, MaxNorm, RMSNorm
-from graphormer.utils import decrease_to_max_value
 from graphormer.config.options import AttentionType, NormType
 
 
@@ -41,22 +40,25 @@ class CentralityEncoding(nn.Module):
 
     def forward(self, x: torch.Tensor, edge_index: torch.LongTensor) -> torch.Tensor:
         """
-        :param x: node embedding
+        :param x: node embedding (batch_size, max_subgraph_size, node_embedding_dim)
         :param edge_index: edge_index of graph (adjacency list)
         :return: torch.Tensor, node embeddings after Centrality encoding
         """
-        num_nodes = x.shape[0]
+        num_nodes = x.shape[1]
+        in_pad_mask = edge_index[:, 1] == -1
+        out_pad_mask = edge_index[:, 0] == -1
 
-        in_degree = decrease_to_max_value(
-            degree(index=edge_index[1], num_nodes=num_nodes).long(),
+        in_degree = torch.clamp_max(
+            degree(index=edge_index[:, 1][~in_pad_mask], num_nodes=num_nodes).long(),
             self.max_in_degree - 1,
         )
-        out_degree = decrease_to_max_value(
-            degree(index=edge_index[0], num_nodes=num_nodes).long(),
+        out_degree = torch.clamp_max(
+            degree(index=edge_index[:, 0][~out_pad_mask], num_nodes=num_nodes).long(),
             self.max_out_degree - 1,
         )
 
-        x += self.z_in[in_degree] + self.z_out[out_degree]
+        # Exclude adding any centrality info to the VNODE
+        x[:, 1:] += self.z_in[in_degree][1:] + self.z_out[out_degree][1:]
 
         return x
 
@@ -75,13 +77,13 @@ class SpatialEncoding(nn.Module):
 
     def forward(self, x: torch.Tensor, paths: torch.Tensor) -> torch.Tensor:
         """
-        :param x: node embedding, shape: (num_nodes, hidden_dim)
-        :param paths: pairwise node paths, shape: (num_pairwaise_paths, max_path_length)
+        :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim)
+        :param paths: pairwise node paths, shape: (batch_size, num_pairwaise_paths, max_path_length)
         :return: torch.Tensor, spatial encoding
         """
 
-        vnode_out_mask = paths[:, 0] == 0
-        vnode_in_mask = paths[:, 1] == 0
+        vnode_out_mask = paths[:, :, 0] == 0
+        vnode_in_mask = paths[:, :, 1] == 0
 
         paths_mask = (paths != -1).to(x.device)
         path_lengths = paths_mask.sum(dim=-1)
@@ -112,39 +114,43 @@ class EdgeEncoding(nn.Module):
         self.edge_embedding_dim = edge_embedding_dim
         self.max_path_distance = max_path_distance
         self.edge_vector = nn.Parameter(torch.randn(self.max_path_distance, self.edge_embedding_dim))
+        self.eps = 1e-9
 
     def forward(
         self,
-        x: torch.Tensor,
         edge_embedding: torch.Tensor,
         edge_paths: torch.Tensor,
     ) -> torch.Tensor:
         """
-        :param x: node feature matrix, shape (num_nodes, hidden_dim)
-        :param edge_embedding: edge feature matrix, shape (num_edges, edge_dim)
-        :param edge_paths: pairwise node paths in edge indexes, shape (sum(num_nodes ** 2 for each graph in the batch), path of edge indexes to traverse from node_i to node_j where len(edge_paths) = max_path_length)
+        :param x: node feature matrix, shape (batch_size, num_nodes, hidden_dim)
+        :param edge_embedding: edge feature matrix, shape (batch_size, num_edges, edge_dim)
+        :param edge_paths: pairwise node paths in edge indexes, shape (batch_size, num_nodes ** 2 + padding, path of edge indexes to traverse from node_i to node_j where len(edge_paths) = max_path_length)
         :return: torch.Tensor, Edge Encoding
         """
-        edge_mask = (edge_paths != -1).to(x.device)
-        path_lengths = edge_mask.sum(dim=-1)
+        batch_size = edge_paths.shape[0]
+        edge_mask = edge_paths == -1
+        edge_paths_clamped = edge_paths.clamp(min=0)
+        batch_indices = torch.arange(batch_size).view(batch_size, 1, 1).expand_as(edge_paths)
 
         # Get the edge embeddings for each edge in the paths (when defined)
-        edge_path_embeddings = torch.full(
-            (edge_paths.shape[0], self.max_path_distance, x.shape[1]), 0.0, dtype=edge_embedding.dtype
-        ).to(x.device)
-        edge_path_embeddings[edge_mask] = edge_embedding[edge_paths].to(x.device)[edge_mask]
+        edge_path_embeddings = edge_embedding[batch_indices, edge_paths_clamped, :]
+        edge_path_embeddings[edge_mask] = 0.0
+
+        path_lengths = (~edge_mask).sum(dim=-1) + self.eps
 
         # Get sum of embeddings * self.edge_vector for edge in the path,
         # then sum the result for each path
-        edge_path_encoding = (edge_path_embeddings * self.edge_vector).sum(dim=1).sum(dim=-1)
+        # b: batch_size
+        # e: padded num_nodes**2
+        # l: max_path_length
+        # d: edge_emb_dim
+        # (batch_size, padded_num_nodes**2)
+        edge_path_encoding = torch.einsum("beld,ld->be", edge_path_embeddings, self.edge_vector)
 
         # Find the mean embedding based on the path lengths
-        # shape: (num_node_pairs)
-        non_empty_paths = path_lengths != 0
-
-        edge_path_encoding[non_empty_paths] = edge_path_encoding[non_empty_paths].div(path_lengths[non_empty_paths])
-
-        return edge_path_encoding.to(x.device)
+        # shape: (batch_size, padded_num_node_pairs)
+        edge_path_encoding = edge_path_encoding.div(path_lengths)
+        return edge_path_encoding
 
 
 class GraphormerMultiHeadAttention(nn.Module):
