@@ -54,7 +54,7 @@ def inference_model(
                 with torch.no_grad():
                     output = model(
                         batch.x,
-                        batch.edge_index,
+                        batch.degrees,
                         batch.edge_attr,
                         batch.node_paths,
                         batch.edge_paths,
@@ -80,7 +80,7 @@ def inference_model(
         with torch.no_grad():
             output = model(
                 batch.x,
-                batch.edge_index,
+                batch.degrees,
                 batch.edge_attr,
                 batch.node_paths,
                 batch.edge_paths,

@@ -58,7 +58,6 @@ class GraphormerCollater(Collater):
         ptr = data.ptr
 
         node_subgraphs = []
-        edge_index_subgraphs = []
         edge_attr_subgraphs = []
         node_paths_subgraphs = []
         edge_paths_subgraphs = []
@@ -74,19 +73,12 @@ class GraphormerCollater(Collater):
             degree_subgraphs.append(degrees[idx_range[0] : idx_range[1], :])
             start_edge_index = (edge_index[0] < idx_range[0]).sum()
             stop_edge_index = (edge_index[0] < idx_range[1]).sum()
-            start_node_index = idx_range[0]
-            edge_index_subgraphs.append(
-                (edge_index[:, start_edge_index:stop_edge_index] - start_node_index).transpose(0, 1)
-            )
             edge_attr_subgraphs.append(edge_attr[start_edge_index:stop_edge_index, :])
             node_paths_subgraphs.append(node_paths[idx_range_sq[0] : idx_range_sq[1]])
             edge_paths_subgraphs.append(edge_paths[idx_range_sq[0] : idx_range_sq[1]])
 
         data.x = rnn.pad_sequence(node_subgraphs, batch_first=True, padding_value=-2)
         data.degrees = rnn.pad_sequence(degree_subgraphs, batch_first=True, padding_value=-1).transpose(1, 2).long()
-        data.edge_index = (
-            rnn.pad_sequence(edge_index_subgraphs, batch_first=True, padding_value=-1).transpose(1, 2).long()
-        )
         assert data.x.shape[1] == data.degrees.shape[2]
         data.edge_attr = rnn.pad_sequence(edge_attr_subgraphs, batch_first=True, padding_value=-1)
         data.node_paths = rnn.pad_sequence(node_paths_subgraphs, batch_first=True, padding_value=-1)
