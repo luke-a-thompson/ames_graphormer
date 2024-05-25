@@ -1,7 +1,6 @@
 from typing import List, Optional
 import torch
 from torch import nn
-import torch.autograd as autograd
 
 from graphormer.modules.encoding import CentralityEncoding, EdgeEncoding, SpatialEncoding
 from graphormer.modules.layers import GraphormerEncoderLayer
@@ -85,6 +84,7 @@ class Graphormer(nn.Module):
         )
 
         self.edge_encoding = EdgeEncoding(self.edge_embedding_dim, self.max_path_distance)
+        self.residual_gates = nn.Parameter(torch.zeros(self.num_layers))
 
         layers = None
         match self.attention_type:
@@ -104,7 +104,7 @@ class Graphormer(nn.Module):
             if m.__class__.__name__.startswith("Dropout"):
                 m.train()
 
-    def fish_layers(self):
+    def fish_layers(self) -> List[GraphormerEncoderLayer]:
         if self.n_global_heads is None and self.global_heads_by_layer is None:
             raise AttributeError("global_heads or global_heads_by_layer must be defined")
         if self.n_local_heads is None and self.local_heads_by_layer is None:
@@ -149,7 +149,7 @@ class Graphormer(nn.Module):
 
     def mha_layers(
         self,
-    ):
+    ) -> List[GraphormerEncoderLayer]:
         if self.n_heads is None and self.heads_by_layer is None:
             raise ValueError("n_heads or heads_by_layer must be defined.")
         if self.heads_by_layer is None or len(self.heads_by_layer) == 0:
@@ -206,15 +206,15 @@ class Graphormer(nn.Module):
         x[:, 1:] += self.centrality_encoding(degrees)[:, 1:]
 
         edge_embedding = self.edge_embedding(edge_attr)
-        spatial_encoding = self.spatial_encoding(x, node_paths)
+        spatial_encoding = self.spatial_encoding(node_paths)
         edge_encoding = self.edge_encoding(edge_embedding, edge_paths)
 
         padded_encoding_bias = spatial_encoding + edge_encoding
 
         x[x_pad_mask] = torch.zeros(self.hidden_dim).to(x.device)
 
-        for layer in self.layers:
-            x = layer(x, padded_encoding_bias)
+        for idx, layer in enumerate(self.layers):
+            x = x + self.residual_gates[idx] * layer(x, padded_encoding_bias)
 
         # Output for each VNODE for each graph
         vnode_outputs = x[:, 0, :]
