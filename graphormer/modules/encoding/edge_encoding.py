@@ -15,7 +15,10 @@ class EdgeEncoding(nn.Module):
         super().__init__()
         self.edge_embedding_dim = edge_embedding_dim
         self.max_path_distance = max_path_distance
-        self.edge_vector = nn.Parameter(torch.randn(self.max_path_distance, self.edge_embedding_dim))
+        # Prior that further edges are less important than closer ones
+        self.edge_vector = nn.Parameter(
+            torch.Tensor([[-x for _ in range(self.edge_embedding_dim)] for x in range(self.max_path_distance)])
+        )
         self.eps = 1e-9
 
     def forward(
@@ -24,7 +27,6 @@ class EdgeEncoding(nn.Module):
         edge_paths: torch.Tensor,
     ) -> torch.Tensor:
         """
-        :param x: node feature matrix, shape (batch_size, num_nodes, hidden_dim)
         :param edge_embedding: edge feature matrix, shape (batch_size, num_edges, edge_dim)
         :param edge_paths: pairwise node paths in edge indexes, shape (batch_size, num_nodes ** 2 + padding, path of edge indexes to traverse from node_i to node_j where len(edge_paths) = max_path_length)
         :return: torch.Tensor, Edge Encoding

@@ -8,6 +8,13 @@ from torch_geometric.loader import DataLoader
 from graphormer.cli import LossReductionType
 from graphormer.config.data import DataConfig
 from graphormer.config.options import SchedulerType
+from graphormer.model_analysis import (
+    plot_edge_path_length_bias,
+    plot_node_path_length_bias,
+    plot_centrality_in_degree_bias,
+    plot_centrality_out_degree_bias,
+    plot_layer_residual_gates,
+)
 from graphormer.schedulers import GreedyLR
 from graphormer.config.utils import calculate_pos_weight, model_init_print, save_checkpoint
 from graphormer.config.hparams import HyperparameterConfig
@@ -194,6 +201,11 @@ def train_model(
         writer.add_scalar("eval/bac", bac, epoch)
         writer.add_scalar("eval/bac_adj", bac_adj, epoch)
         writer.add_scalar("eval/avg_eval_loss", avg_eval_loss, epoch)
+        writer.add_figure("edge_encoding_bias", plot_edge_path_length_bias(model), epoch)  # type: ignore
+        writer.add_figure("node_encoding_bias", plot_node_path_length_bias(model), epoch)  # type: ignore
+        writer.add_figure("centrality_in_degree_bias", plot_centrality_in_degree_bias(model), epoch)  # type: ignore
+        writer.add_figure("centrality_out_degree_bias", plot_centrality_out_degree_bias(model), epoch)  # type: ignore
+        writer.add_figure("residual_gates", plot_layer_residual_gates(model), epoch)  # type: ignore
 
         print(
             f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {

@@ -13,8 +13,13 @@ class CentralityEncoding(nn.Module):
         self.max_in_degree = max_in_degree
         self.max_out_degree = max_out_degree
         self.hidden_dim = hidden_dim
-        self.z_in = nn.Parameter(torch.randn((max_in_degree, hidden_dim)))
-        self.z_out = nn.Parameter(torch.randn((max_out_degree, hidden_dim)))
+        # Prior that more central nodes hold more important than less central nodes
+        self.z_in = nn.Parameter(
+            torch.Tensor([[x for _ in range(self.hidden_dim)] for x in range(self.max_in_degree + 1)])
+        )
+        self.z_out = nn.Parameter(
+            torch.Tensor([[x for _ in range(self.hidden_dim)] for x in range(self.max_out_degree + 1)])
+        )
 
     def forward(self, degrees: torch.LongTensor) -> torch.Tensor:
         """
@@ -26,11 +31,11 @@ class CentralityEncoding(nn.Module):
 
         in_degree = torch.clamp_max(
             degrees[:, 1],
-            self.max_in_degree - 1,
+            self.max_in_degree,
         )
         out_degree = torch.clamp_max(
             degrees[:, 0],
-            self.max_out_degree - 1,
+            self.max_out_degree,
         )
 
         z_in = self.z_in[in_degree[~pad_mask]]

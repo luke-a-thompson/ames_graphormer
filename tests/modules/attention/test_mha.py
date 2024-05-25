@@ -1,5 +1,5 @@
 import torch
-from graphormer.modules.layers import GraphormerMultiHeadAttention
+from graphormer.modules.attention import GraphormerMultiHeadAttention
 
 
 class TestMultiHeadAttentionGroup:
