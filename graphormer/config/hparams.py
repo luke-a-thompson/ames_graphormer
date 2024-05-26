@@ -13,6 +13,7 @@ from graphormer.config.options import (
     AttentionType,
     LossReductionType,
     DatasetType,
+    ResidualType,
     SchedulerType,
     OptimizerType,
     NormType,
@@ -55,6 +56,7 @@ class HyperparameterConfig:
         dropout: Optional[float] = None,
         norm_type: Optional[NormType] = None,
         attention_type: Optional[AttentionType] = None,
+        residual_type: Optional[ResidualType] = None,
         # Optimizer Parameters
         optimizer_type: Optional[OptimizerType] = None,
         momentum: Optional[float] = None,
@@ -178,6 +180,7 @@ class HyperparameterConfig:
         self.attention_type = attention_type
         self.num_workers = num_workers
         self.prefetch_factor = prefetch_factor
+        self.residual_type = residual_type
 
         self.model_state_dict = None
         self.optimizer_state_dict = None
@@ -247,6 +250,8 @@ class HyperparameterConfig:
             config = config.with_global_heads_by_layer(self.global_heads_by_layer)
         if self.local_heads_by_layer is not None:
             config = config.with_local_heads_by_layer(self.local_heads_by_layer)
+        if self.residual_type is not None:
+            config = config.with_residual_type(self.residual_type)
 
         if self.model_state_dict is not None:
             config = config.with_state_dict(self.model_state_dict)

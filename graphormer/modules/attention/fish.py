@@ -1,6 +1,7 @@
 import torch
-import torch.autograd as autograd
 import torch.nn as nn
+
+from graphormer.modules.model_data import ModelData
 
 
 class GraphormerFishAttention(nn.Module):
@@ -47,8 +48,7 @@ class GraphormerFishAttention(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
-        encoding_bias: torch.Tensor,
+        data: ModelData,
     ):
         """
         :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim)
@@ -57,10 +57,14 @@ class GraphormerFishAttention(nn.Module):
         :return: torch.Tensor, node embeddings after all attention heads
         """
 
+        assert data.normalized_input is not None
+        assert data.attention_prior is not None
+        x = data.normalized_input
+        prior = data.attention_prior
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
         # (batch_size, 1, max_seq_len, max_seq_len)
-        bias = encoding_bias.view(batch_size, 1, max_subgraph_size, max_subgraph_size).contiguous()
+        bias = prior.view(batch_size, 1, max_subgraph_size, max_subgraph_size).contiguous()
 
         global_q_x = (
             self.global_q(x).contiguous().view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size)
@@ -110,4 +114,5 @@ class GraphormerFishAttention(nn.Module):
         a = torch.einsum("blnm,bmld->bnld", a, v_x)
         a = self.att_dropout(a)
         attn = a.reshape(batch_size, max_subgraph_size, self.num_local_heads * self.head_size).contiguous()
-        return self.linear_out(attn)
+        data.attention_output = self.linear_out(attn)
+        return data

@@ -1,6 +1,7 @@
 import torch
 
 from graphormer.modules.encoding import CentralityEncoding
+from graphormer.modules.model_data import ModelData
 
 
 class TestCentralityEncodingGroup:
@@ -28,13 +29,22 @@ class TestCentralityEncodingGroup:
         degrees[1, 0] = torch.Tensor([3, 4, -1])
         degrees = degrees.long()
 
-        encoded_degrees = centrality_encoding(degrees)
-        assert encoded_degrees.shape == (batch_size, num_nodes, hidden_dim)
+        device = torch.device("cpu")
+        data = ModelData(
+            torch.zeros(batch_size, num_nodes, hidden_dim),
+            degrees,
+            torch.zeros(3),
+            torch.zeros(3),
+            torch.zeros(3),
+            device,
+        )
+        data: ModelData = centrality_encoding(data)
+        assert data.x.shape == (batch_size, num_nodes, hidden_dim)
 
-        assert (encoded_degrees[0, 0, :] == 7.0).all(), encoded_degrees[0, 0, :]
-        assert (encoded_degrees[0, 1, :] == 27.0).all(), encoded_degrees[0, 1, :]
-        assert (encoded_degrees[0, 2, :] == 41.0).all(), encoded_degrees[0, 2, :]
+        assert (data.x[0, 0, :] == 7.0).all(), data.x[0, 0, :]
+        assert (data.x[0, 1, :] == 27.0).all(), data.x[0, 1, :]
+        assert (data.x[0, 2, :] == 41.0).all(), data.x[0, 2, :]
 
-        assert (encoded_degrees[1, 0, :] == 19.0).all(), encoded_degrees[1, 0, :]
-        assert (encoded_degrees[1, 1, :] == 24.0).all(), encoded_degrees[1, 1, :]
-        assert (encoded_degrees[1, 2, :] == 0.0).all(), encoded_degrees
+        assert (data.x[1, 0, :] == 19.0).all(), data.x[1, 0, :]
+        assert (data.x[1, 1, :] == 24.0).all(), data.x[1, 1, :]
+        assert (data.x[1, 2, :] == 0.0).all(), data.x

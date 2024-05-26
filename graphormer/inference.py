@@ -52,13 +52,7 @@ def inference_model(
                 batch.to(device)
                 y = batch.y.to(device)
                 with torch.no_grad():
-                    output = model(
-                        batch.x,
-                        batch.degrees,
-                        batch.edge_attr,
-                        batch.node_paths,
-                        batch.edge_paths,
-                    )
+                    output = model(batch)
 
                 batch_eval_preds = torch.sigmoid(output).tolist()
                 batch_eval_labels = y.cpu().numpy()
@@ -78,13 +72,7 @@ def inference_model(
         batch.to(device)
         y = batch.y.to(device)
         with torch.no_grad():
-            output = model(
-                batch.x,
-                batch.degrees,
-                batch.edge_attr,
-                batch.node_paths,
-                batch.edge_paths,
-            )
+            output = model(batch)
 
             batch_eval_preds = torch.sigmoid(output).tolist()
             batch_eval_labels = y.cpu().numpy()

@@ -3,7 +3,6 @@ from torch.utils.data import Subset
 from sklearn.model_selection import train_test_split
 from graphormer.config.options import DatasetType
 from graphormer.data.dataloader import GraphormerDataLoader
-from torch_geometric.loader import DataLoader
 
 
 class DataConfig:
@@ -36,7 +35,7 @@ class DataConfig:
         self.prefetch_factor = prefect_factor
         return self
 
-    def build(self) -> Tuple[DataLoader, DataLoader]:
+    def build(self) -> Tuple[GraphormerDataLoader, GraphormerDataLoader]:
 
         dataloader_optimization_params = {
             "pin_memory": True,

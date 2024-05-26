@@ -1,5 +1,6 @@
 import torch
 from graphormer.modules.attention import GraphormerMultiHeadAttention
+from graphormer.modules.model_data import ModelData
 
 
 class TestMultiHeadAttentionGroup:
@@ -32,13 +33,11 @@ class TestMultiHeadAttentionGroup:
                 .reshape(batch_size, num_nodes, embedding_dim)
                 .float()
             )
-            encoding_bias = torch.zeros(batch_size, num_nodes, num_nodes)
-
-            mha_out = mha.forward(x, encoding_bias)
+            device = torch.device("cpu")
+            data = ModelData(x, torch.zeros(3), torch.zeros(3), torch.zeros(3), torch.zeros(3), device)
+            data.normalized_input = x
+            data.attention_prior = torch.zeros(batch_size, num_nodes, num_nodes)
+            data = mha.forward(data)
+            assert data.attention_output is not None
             ref_mha_out = ref_mha.forward(x, x, x, need_weights=False)[0]
-            print("x: ", x)
-            print()
-            print("mha_out: ", mha_out)
-            print()
-            print("ref_mha_out: ", ref_mha_out)
-            assert torch.allclose(mha_out, ref_mha_out, rtol=0.3)
+            assert torch.allclose(data.attention_output, ref_mha_out, rtol=0.3)

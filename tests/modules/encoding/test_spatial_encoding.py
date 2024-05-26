@@ -1,5 +1,6 @@
 import torch
 from graphormer.modules.encoding import SpatialEncoding
+from graphormer.modules.model_data import ModelData
 
 
 class TestSpatialEncodingGroup:
@@ -24,18 +25,23 @@ class TestSpatialEncodingGroup:
         paths[1][13] = torch.Tensor([3.0, 2.0, -1.0, -1.0, -1.0])
         paths[1][14] = torch.Tensor([5.0, 4.0, 3.0, 2.0, -1.0])
 
-        encoded_paths = spatial_encoding(paths)
-        assert encoded_paths.shape == (batch_size, num_pairwise_paths)
-        assert (encoded_paths[0, :6] == spatial_encoding.t1).all()
-        assert (encoded_paths[0, 6:12] == spatial_encoding.t2).all()
+        device = torch.device("cpu")
+        data = ModelData(torch.zeros(3), torch.zeros(3), torch.zeros(3), paths, torch.zeros(3), device)
+
+        data: ModelData = spatial_encoding(data)
+        assert data.spatial_encoding is not None
+
+        assert data.spatial_encoding.shape == (batch_size, num_pairwise_paths)
+        assert (data.spatial_encoding[0, :6] == spatial_encoding.t1).all()
+        assert (data.spatial_encoding[0, 6:12] == spatial_encoding.t2).all()
 
         expected_path_0_13_encoding = torch.Tensor([-2.0])
         expected_path_0_14_encoding = torch.Tensor([-4.0])
         expected_path_1_13_encoding = torch.Tensor([-1.0])
         expected_path_1_14_encoding = torch.Tensor([-3.0])
-        assert encoded_paths[0, 13] == expected_path_0_13_encoding
-        assert encoded_paths[0, 14] == expected_path_0_14_encoding
-        assert encoded_paths[1, 13] == expected_path_1_13_encoding
-        assert encoded_paths[1, 14] == expected_path_1_14_encoding
-        assert (encoded_paths[0, 15:] == 0.0).all()
-        assert (encoded_paths[1, 15:] == 0.0).all()
+        assert data.spatial_encoding[0, 13] == expected_path_0_13_encoding
+        assert data.spatial_encoding[0, 14] == expected_path_0_14_encoding
+        assert data.spatial_encoding[1, 13] == expected_path_1_13_encoding
+        assert data.spatial_encoding[1, 14] == expected_path_1_14_encoding
+        assert (data.spatial_encoding[0, 15:] == 0.0).all()
+        assert (data.spatial_encoding[1, 15:] == 0.0).all()

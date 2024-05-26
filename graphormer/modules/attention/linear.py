@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from graphormer.modules.model_data import ModelData
+
 
 class GraphormerLinearAttention(nn.Module):
     """
@@ -15,8 +17,7 @@ class GraphormerLinearAttention(nn.Module):
     def __init__(self, num_heads: int, hidden_dim: int, dropout_rate: float = 0.1, eps: float = 1e-09):
         """
         :param num_heads: number of attention heads
-        :param d_x: node feature matrix input number of dimension
-        :param edge_dim: edge feature matrix number of dimension
+        :param hidden_dim: node feature matrix input number of dimension
         """
         super().__init__()
         self.num_heads = num_heads
@@ -37,19 +38,19 @@ class GraphormerLinearAttention(nn.Module):
 
         self.linear_out = nn.Linear(hidden_dim, hidden_dim, bias=True)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        encoding_bias: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, data: ModelData) -> ModelData:
         """
         :param x: input, shape (batch_size, max_subgraph_size, node_embed_dim)
         :param encoding_bias: the bias term, shape (batch_size, max_subgraph_size, max_subgraph_size)
         """
+        assert data.normalized_input is not None
+        assert data.attention_prior is not None
+        x = data.normalized_input
+        prior = data.attention_prior
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
         # (batch_size, max_subgraph_size, 1, 1)
-        bias = encoding_bias.mean(dim=-1).view(batch_size, max_subgraph_size, 1, 1)
+        bias = prior.mean(dim=-1).view(batch_size, max_subgraph_size, 1, 1)
 
         q_x = self.feature_map(
             self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size) + bias
@@ -88,4 +89,5 @@ class GraphormerLinearAttention(nn.Module):
 
         attn = self.att_dropout(attn)
         attn = attn.contiguous().view(batch_size, max_subgraph_size, self.num_heads * self.head_size)
-        return self.linear_out(attn)
+        data.attention_output = self.linear_out(attn)
+        return data

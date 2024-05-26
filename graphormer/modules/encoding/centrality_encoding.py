@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from graphormer.modules.model_data import ModelData
+
 
 class CentralityEncoding(nn.Module):
     def __init__(self, max_in_degree: int, max_out_degree: int, hidden_dim: int):
@@ -21,20 +23,20 @@ class CentralityEncoding(nn.Module):
             torch.Tensor([[x for _ in range(self.hidden_dim)] for x in range(self.max_out_degree + 1)])
         )
 
-    def forward(self, degrees: torch.LongTensor) -> torch.Tensor:
+    def forward(self, data: ModelData) -> ModelData:
         """
         :param degrees: degrees of graph (batch_size, 2, num_nodes)
         :return: torch.Tensor, centrality encoding (batch_size, num_nodes, hidden_dim)
         """
-        centrality_encoding = torch.zeros(degrees.shape[0], degrees.shape[2], self.hidden_dim).to(degrees.device)
-        pad_mask = (degrees == -1)[:, 0]
+        centrality_encoding = torch.zeros(data.degrees.shape[0], data.degrees.shape[2], self.hidden_dim).to(data.device)
+        pad_mask = (data.degrees == -1)[:, 0]
 
         in_degree = torch.clamp_max(
-            degrees[:, 1],
+            data.degrees[:, 1],
             self.max_in_degree,
         )
         out_degree = torch.clamp_max(
-            degrees[:, 0],
+            data.degrees[:, 0],
             self.max_out_degree,
         )
 
@@ -42,5 +44,6 @@ class CentralityEncoding(nn.Module):
         z_out = self.z_out[out_degree[~pad_mask]]
 
         centrality_encoding[~pad_mask] = z_in + z_out
+        data.x += centrality_encoding
 
-        return centrality_encoding
+        return data

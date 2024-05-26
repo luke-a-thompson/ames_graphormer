@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from graphormer.modules.model_data import ModelData
+
 
 class GraphormerMultiHeadAttention(nn.Module):
     def __init__(self, num_heads: int, hidden_dim: int, dropout_rate: float = 0.1):
@@ -26,19 +28,20 @@ class GraphormerMultiHeadAttention(nn.Module):
 
         self.linear_out = nn.Linear(self.hidden_dim, self.hidden_dim, bias=True)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        encoding_bias: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, data: ModelData) -> ModelData:
         """
         :param x: node embedding, shape: (batch_size, num_nodes, hidden_dim)
         :param encoding_bias: spatial encoding matrix, shape (batch_size, max_graph_size, max_graph_size)
         :return: torch.Tensor, node embeddings after all attention heads
         """
+        assert data.normalized_input is not None
+        assert data.attention_prior is not None
+
+        x = data.normalized_input
+        attention_prior = data.attention_prior
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
-        bias = encoding_bias.view(batch_size, 1, max_subgraph_size, max_subgraph_size)
+        prior = attention_prior.view(batch_size, 1, max_subgraph_size, max_subgraph_size)
 
         q_x = self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size)
         k_x = self.linear_k(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size)
@@ -49,7 +52,7 @@ class GraphormerMultiHeadAttention(nn.Module):
         # h: num_heads
         # d: head_size
         # (batch_size, num_heads, head_size, max_subgraph_size, max_subgraph_size)
-        a = torch.einsum("bnhd,bmhd->bhnm", q_x, k_x) * self.scale + bias
+        a = torch.einsum("bnhd,bmhd->bhnm", q_x, k_x) * self.scale + prior
         pad_mask = torch.all(a == 0, dim=-1)
         a[pad_mask] = float("-inf")
         a = torch.softmax(a, dim=-1)
@@ -62,4 +65,5 @@ class GraphormerMultiHeadAttention(nn.Module):
         a = torch.einsum("bhnm,bmhd->bnhd", a, v_x)
         a = self.att_dropout(a)
         attn = a.contiguous().view(batch_size, max_subgraph_size, self.num_heads * self.head_size)
-        return self.linear_out(attn)
+        data.attention_output = self.linear_out(attn)
+        return data

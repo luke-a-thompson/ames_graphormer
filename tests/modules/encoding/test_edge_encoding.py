@@ -1,6 +1,7 @@
 import torch
 
 from graphormer.modules.encoding import EdgeEncoding
+from graphormer.modules.model_data import ModelData
 
 
 class TestEdgeEncodingGroup:
@@ -55,9 +56,13 @@ class TestEdgeEncodingGroup:
         )
         edge_paths = edge_paths.long()
 
-        encoding = edge_encoding(edge_embedding, edge_paths)
+        device = torch.device("cpu")
+        data = ModelData(torch.zeros(3), torch.zeros(3), torch.zeros(3), torch.zeros(3), edge_paths, device)
+        data.edge_embedding = edge_embedding
+        data: ModelData = edge_encoding(data)
+        assert data.edge_encoding is not None
 
-        assert encoding.shape == (batch_size, num_nodes**2)
+        assert data.edge_encoding.shape == (batch_size, num_nodes**2)
         # encoding in batch 0 of node 0 -> 0 by edges
         # x_e_n - the feature of the nth edge in the path
         # (edge_embedding_dim)
@@ -77,7 +82,7 @@ class TestEdgeEncodingGroup:
         sum_n = torch.dot(x_e_0, w_0) + torch.dot(x_e_1, w_1) + torch.dot(x_e_2, w_2) + torch.dot(x_e_3, w_3)
         expected_encoding = sum_n / 4
 
-        assert encoding[0, 0] == expected_encoding
+        assert data.edge_encoding[0, 0] == expected_encoding
 
         # Same as above, but our path length is only 3
         x_e_0 = edge_embedding[0, edge_paths[0, 1, 0]]
@@ -87,7 +92,7 @@ class TestEdgeEncodingGroup:
         sum_n = torch.dot(x_e_0, w_0) + torch.dot(x_e_1, w_1) + torch.dot(x_e_2, w_2)
         expected_encoding = sum_n / 3
 
-        assert encoding[0, 1] == expected_encoding
+        assert data.edge_encoding[0, 1] == expected_encoding
 
         # Same as above, but our path length is only 2
         x_e_0 = edge_embedding[0, edge_paths[0, 2, 0]]
@@ -96,7 +101,7 @@ class TestEdgeEncodingGroup:
         sum_n = torch.dot(x_e_0, w_0) + torch.dot(x_e_1, w_1)
         expected_encoding = sum_n / 2
 
-        assert encoding[0, 2] == expected_encoding
+        assert data.edge_encoding[0, 2] == expected_encoding
 
         # Same as above, but our path length is only 1
         x_e_0 = edge_embedding[0, edge_paths[0, 3, 0]]
@@ -104,8 +109,8 @@ class TestEdgeEncodingGroup:
         sum_n = torch.dot(x_e_0, w_0)
         expected_encoding = sum_n
 
-        assert encoding[0, 3] == expected_encoding
-        assert encoding[0, 4] == torch.Tensor([0])
+        assert data.edge_encoding[0, 3] == expected_encoding
+        assert data.edge_encoding[0, 4] == torch.Tensor([0])
 
         # Now check for the second batch
         x_e_0 = edge_embedding[1, edge_paths[1, 5, 0]]
@@ -113,22 +118,22 @@ class TestEdgeEncodingGroup:
         sum_n = torch.dot(x_e_0, w_0)
         expected_encoding = sum_n
 
-        assert encoding[1, 5] == expected_encoding
+        assert data.edge_encoding[1, 5] == expected_encoding
 
         x_e_0 = edge_embedding[1, edge_paths[1, 6, 0]]
         x_e_1 = edge_embedding[1, edge_paths[1, 6, 1]]
 
         sum_n = torch.dot(x_e_0, w_0) + torch.dot(x_e_1, w_1)
         expected_encoding = sum_n / 2
-        assert encoding[1, 6] == expected_encoding
+        assert data.edge_encoding[1, 6] == expected_encoding
 
         x_e_0 = edge_embedding[1, edge_paths[1, 7, 0]]
 
         sum_n = torch.dot(x_e_0, w_0)
         expected_encoding = sum_n
 
-        assert encoding[1, 7] == expected_encoding
+        assert data.edge_encoding[1, 7] == expected_encoding
 
-        assert (encoding[0, 5:] == 0).all(), encoding
-        assert (encoding[1, :5] == 0).all(), encoding
-        assert (encoding[1, 8:] == 0).all(), encoding
+        assert (data.edge_encoding[0, 5:] == 0).all(), data.edge_encoding
+        assert (data.edge_encoding[1, :5] == 0).all(), data.edge_encoding
+        assert (data.edge_encoding[1, 8:] == 0).all(), data.edge_encoding

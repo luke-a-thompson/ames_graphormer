@@ -16,6 +16,7 @@ from graphormer.config.options import (
     OptimizerType,
     SchedulerType,
     DatasetType,
+    ResidualType,
 )
 from graphormer.config.tuning_hparams import TuningHyperparameterConfig
 from graphormer.train import train_model
@@ -52,6 +53,7 @@ def configure(ctx, param, filename):
 @click.option("--max_in_degree", default=5)
 @click.option("--max_out_degree", default=5)
 @click.option("--max_path_distance", default=5)
+@click.option("--residual_type", type=click.Choice(ResidualType, case_sensitive=False), default=ResidualType.PRENORM)  # type: ignore
 @click.option("--test_size", default=0.8)
 @click.option("--random_state", default=None, type=click.INT)
 @click.option("--batch_size", default=16)
@@ -136,6 +138,7 @@ def train(**kwargs):
 @click.option("--max_in_degree", default=5)
 @click.option("--max_out_degree", default=5)
 @click.option("--max_path_distance", default=5)
+@click.option("--residual_type", type=click.Choice(ResidualType, case_sensitive=False), default=ResidualType.PRENORM)  # type: ignore
 @click.option("--test_size", default=0.8)
 @click.option("--random_state", default=None, type=click.INT)
 @click.option("--batch_size", default=128)

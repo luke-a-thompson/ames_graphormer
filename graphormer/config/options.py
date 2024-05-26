@@ -37,3 +37,8 @@ class AttentionType(str, Enum):
     MHA = "mha"
     FISH = "fish"
     LINEAR = "linear"
+
+
+class ResidualType(str, Enum):
+    PRENORM = "prenorm"
+    REZERO = "rezero"

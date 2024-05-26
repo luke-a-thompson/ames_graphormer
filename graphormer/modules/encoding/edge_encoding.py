@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from graphormer.modules.model_data import ModelData
+
 
 class EdgeEncoding(nn.Module):
     def __init__(self, edge_embedding_dim: int, max_path_distance: int):
@@ -21,23 +23,20 @@ class EdgeEncoding(nn.Module):
         )
         self.eps = 1e-9
 
-    def forward(
-        self,
-        edge_embedding: torch.Tensor,
-        edge_paths: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, data: ModelData) -> ModelData:
         """
-        :param edge_embedding: edge feature matrix, shape (batch_size, num_edges, edge_dim)
-        :param edge_paths: pairwise node paths in edge indexes, shape (batch_size, num_nodes ** 2 + padding, path of edge indexes to traverse from node_i to node_j where len(edge_paths) = max_path_length)
+        :param data.edge_embedding: edge feature matrix, shape (batch_size, num_edges, edge_dim)
+        :param data.edge_paths: pairwise node paths in edge indexes, shape (batch_size, num_nodes ** 2 + padding, path of edge indexes to traverse from node_i to node_j where len(edge_paths) = max_path_length)
         :return: torch.Tensor, Edge Encoding
         """
-        batch_size = edge_paths.shape[0]
-        edge_mask = edge_paths == -1
-        edge_paths_clamped = edge_paths.clamp(min=0)
-        batch_indices = torch.arange(batch_size).view(batch_size, 1, 1).expand_as(edge_paths)
+        batch_size = data.edge_paths.shape[0]
+        edge_mask = data.edge_paths == -1
+        edge_paths_clamped = data.edge_paths.clamp(min=0)
+        batch_indices = torch.arange(batch_size).view(batch_size, 1, 1).expand_as(data.edge_paths)
 
         # Get the edge embeddings for each edge in the paths (when defined)
-        edge_path_embeddings = edge_embedding[batch_indices, edge_paths_clamped, :]
+        assert data.edge_embedding is not None
+        edge_path_embeddings = data.edge_embedding[batch_indices, edge_paths_clamped, :]
         edge_path_embeddings[edge_mask] = 0.0
 
         path_lengths = (~edge_mask).sum(dim=-1) + self.eps
@@ -53,5 +52,5 @@ class EdgeEncoding(nn.Module):
 
         # Find the mean embedding based on the path lengths
         # shape: (batch_size, padded_num_node_pairs)
-        edge_path_encoding = edge_path_encoding.div(path_lengths)
-        return edge_path_encoding
+        data.edge_encoding = edge_path_encoding.div(path_lengths)
+        return data

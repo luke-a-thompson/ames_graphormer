@@ -4,16 +4,18 @@ import torch
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from torch.optim.lr_scheduler import OneCycleLR, PolynomialLR, ReduceLROnPlateau
-from torch_geometric.loader import DataLoader
+
+from graphormer.data.dataloader import GraphormerBatch, GraphormerDataLoader
 from graphormer.cli import LossReductionType
 from graphormer.config.data import DataConfig
-from graphormer.config.options import SchedulerType
+from graphormer.config.options import AttentionType, ResidualType, SchedulerType
 from graphormer.model_analysis import (
+    plot_attention_sigma,
     plot_edge_path_length_bias,
     plot_node_path_length_bias,
     plot_centrality_in_degree_bias,
     plot_centrality_out_degree_bias,
-    plot_layer_residual_gates,
+    plot_layer_residual_weights,
 )
 from graphormer.schedulers import GreedyLR
 from graphormer.config.utils import calculate_pos_weight, model_init_print, save_checkpoint
@@ -24,8 +26,8 @@ from optuna.trial import Trial
 def train_model(
     hparam_config: HyperparameterConfig,
     trial: Optional[Trial] = None,
-    train_loader: Optional[DataLoader] = None,
-    test_loader: Optional[DataLoader] = None,
+    train_loader: Optional[GraphormerDataLoader] = None,
+    test_loader: Optional[GraphormerDataLoader] = None,
     data_config: Optional[DataConfig] = None,
     optimized_model: bool = False,
 ) -> float:
@@ -88,25 +90,20 @@ def train_model(
         avg_loss = 0.0
         train_batch_num = epoch * train_batches_per_epoch
         for batch_idx, batch in enumerate(train_loader):
+            batch: GraphormerBatch = batch
             if batch_idx / train_batches_per_epoch > hparam_config.tune_size and trial is not None:
                 break
-            batch.to(device)
-            y = batch.y.to(device)
+            batch.to(device)  # type: ignore
+            y = batch.y.to(device)  # type: ignore
 
             if train_batch_num == 0 and trial is None:
-                writer.add_graph(
-                    model,
-                    [batch.x, batch.degrees, batch.edge_attr, batch.node_paths, batch.edge_paths],
-                )
+                # writer.add_graph(
+                #     model,
+                #     batch,
+                # )
                 optimizer.zero_grad()
 
-            output = model(
-                batch.x,
-                batch.degrees,
-                batch.edge_attr,
-                batch.node_paths,
-                batch.edge_paths,
-            )
+            output = model(batch)
 
             loss = loss_function(output, y)
 
@@ -160,16 +157,10 @@ def train_model(
         model.eval()
         eval_batch_num = epoch * eval_batches_per_epoch
         for batch in test_loader:
-            batch.to(device)
-            y = batch.y.to(device)
+            batch.to(device)  # type: ignore
+            y = batch.y.to(device)  # type: ignore
             with torch.no_grad():
-                output = model(
-                    batch.x,
-                    batch.degrees,
-                    batch.edge_attr,
-                    batch.node_paths,
-                    batch.edge_paths,
-                )
+                output = model(batch)
                 loss = loss_function(output, y)
             batch_loss: float = loss.item()
             writer.add_scalar("eval/batch_loss", batch_loss, eval_batch_num)
@@ -201,11 +192,14 @@ def train_model(
         writer.add_scalar("eval/bac", bac, epoch)
         writer.add_scalar("eval/bac_adj", bac_adj, epoch)
         writer.add_scalar("eval/avg_eval_loss", avg_eval_loss, epoch)
-        writer.add_figure("edge_encoding_bias", plot_edge_path_length_bias(model), epoch)  # type: ignore
-        writer.add_figure("node_encoding_bias", plot_node_path_length_bias(model), epoch)  # type: ignore
-        writer.add_figure("centrality_in_degree_bias", plot_centrality_in_degree_bias(model), epoch)  # type: ignore
-        writer.add_figure("centrality_out_degree_bias", plot_centrality_out_degree_bias(model), epoch)  # type: ignore
-        writer.add_figure("residual_gates", plot_layer_residual_gates(model), epoch)  # type: ignore
+        writer.add_figure("plot/edge_encoding_bias", plot_edge_path_length_bias(model), epoch)  # type: ignore
+        writer.add_figure("plot/node_encoding_bias", plot_node_path_length_bias(model), epoch)  # type: ignore
+        writer.add_figure("plot/centrality_in_degree_bias", plot_centrality_in_degree_bias(model), epoch)  # type: ignore
+        writer.add_figure("plot/centrality_out_degree_bias", plot_centrality_out_degree_bias(model), epoch)  # type: ignore
+        if hparam_config.residual_type == ResidualType.REZERO:
+            writer.add_figure("plot/residual_weigths", plot_layer_residual_weights(model), epoch)  # type: ignore
+        if hparam_config.attention_type == AttentionType.FISH:
+            writer.add_figure("plot/sigma_strength", plot_attention_sigma(model), epoch)  # type: ignore
 
         print(
             f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {

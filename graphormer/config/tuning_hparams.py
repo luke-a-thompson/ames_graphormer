@@ -7,6 +7,7 @@ from graphormer.config.options import (
     DatasetType,
     LossReductionType,
     OptimizerType,
+    ResidualType,
     SchedulerType,
     NormType,
 )
@@ -49,6 +50,7 @@ class TuningHyperparameterConfig:
         min_dropout: Optional[float] = None,
         norm_type: Optional[NormType] = None,
         attention_type: Optional[AttentionType] = None,
+        residual_type: Optional[ResidualType] = None,
         # Optimizer Parameters
         optimizer_type: Optional[OptimizerType] = None,
         loss_reduction_type: Optional[LossReductionType] = None,
@@ -138,6 +140,7 @@ class TuningHyperparameterConfig:
         self.n_local_heads = n_local_heads
         self.global_heads_by_layer = global_heads_by_layer
         self.local_heads_by_layer = local_heads_by_layer
+        self.residual_type = residual_type
 
         # Optimizer Parameters
         self.optimizer_type = optimizer_type
@@ -297,6 +300,12 @@ class TuningHyperparameterConfig:
         if self.max_max_momentum is None:
             raise AttributeError("max_max_momentum not defined for TuningHyperparameterConfig")
 
+        if self.residual_type is None:
+            residual_type = ResidualType(
+                trial.suggest_categorical("residual_type", [ResidualType.PRENORM, ResidualType.REZERO])
+            )
+        else:
+            residual_type = self.residual_type
         if self.optimizer_type is None:
             optimizer_type = OptimizerType(
                 trial.suggest_categorical("optimizer_type", [OptimizerType.SGD, OptimizerType.ADAMW])
@@ -425,6 +434,7 @@ class TuningHyperparameterConfig:
             n_local_heads=self.n_local_heads,
             global_heads_by_layer=self.global_heads_by_layer,
             local_heads_by_layer=self.local_heads_by_layer,
+            residual_type=residual_type,
             # Optimizer Parameters
             optimizer_type=optimizer_type,
             lr=self.lr,

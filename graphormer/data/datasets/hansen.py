@@ -11,7 +11,7 @@ class HansenDataset(GraphormerDataset):
 
     @property
     def raw_file_names(self):
-        return ["Hansen_New.csv"]
+        return ["Hansen_New.xlsx"]
 
     @property
     def processed_file_names(self):
