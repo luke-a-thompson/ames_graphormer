@@ -3,6 +3,7 @@ import pandas as pd
 from torch_geometric.data import InMemoryDataset
 from tqdm import tqdm
 from graphormer.data.data_cleaning import check_smiles_and_label, process
+from torch_geometric.utils import from_smiles
 
 
 class GraphormerDataset(InMemoryDataset):
@@ -44,7 +45,9 @@ class GraphormerDataset(InMemoryDataset):
                 warnings.append(warning)
                 continue
 
-            data = process(smiles, label, self.max_distance)
+            data = from_smiles(smiles)
+            data.y = label
+            data = process(data, label, self.max_distance)
             data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])

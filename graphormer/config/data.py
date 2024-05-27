@@ -101,5 +101,26 @@ class DataConfig:
 
                 return train_loader, test_loader
 
+            case DatasetType.OGBG_MOLPCBA:
+                from graphormer.data.datasets import OGBDataset
+
+                dataset = OGBDataset(self.data_dir, max_distance=self.max_path_distance)
+                self.num_node_features = dataset.num_node_features
+                self.num_edge_features = dataset.num_edge_features
+
+                split_idx = dataset.get_idx_split()
+
+                train_loader = GraphormerDataLoader(
+                    dataset[split_idx["train"]],
+                    batch_size=self.batch_size,
+                    shuffle=True,
+                    **dataloader_optimization_params,
+                )
+                valid_loader = GraphormerDataLoader(
+                    dataset[split_idx["valid"]], batch_size=self.batch_size, **dataloader_optimization_params
+                )
+
+                return train_loader, valid_loader
+
     def __str__(self) -> str:
         return f"{self.dataset_type} dataset"

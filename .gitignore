@@ -174,3 +174,4 @@ hparams/*
 *.sqlite3
 **/**/*.pkl
 **/**/*.png
+**/data/ogbg_molpcba/*

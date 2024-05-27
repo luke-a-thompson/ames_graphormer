@@ -18,6 +18,7 @@ class DatasetType(str, Enum):
     HONMA = "honma"
     HANSEN = "hansen"
     COMBINED = "combined"
+    OGBG_MOLPCBA = "ogbg-molpcba"
 
 
 class LossReductionType(str, Enum):

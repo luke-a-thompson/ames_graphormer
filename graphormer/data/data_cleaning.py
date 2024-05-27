@@ -1,5 +1,5 @@
 import torch
-from torch_geometric.utils import from_smiles, degree
+from torch_geometric.utils import degree
 from graphormer.functional import shortest_path_distance
 from rdkit import Chem
 
@@ -15,9 +15,8 @@ def check_smiles_and_label(smiles, label):
     return None
 
 
-def process(smiles, label, max_distance):
-    data = from_smiles(smiles)
-    data.y = label
+def process(data, max_distance):
+
     node_paths, edge_paths, extra_edge_idxs = shortest_path_distance(data.edge_index, max_distance)
 
     data.x = torch.cat((torch.ones(1, data.x.shape[1]) * -1, data.x), dim=0)
@@ -39,7 +38,5 @@ def process(smiles, label, max_distance):
     )
 
     assert data.degrees.shape[0] == data.x.shape[0]
-    assert data.edge_attr.shape[0] - 1 == torch.max(
-        data.edge_paths
-    ), f"Missing edge attrs for graph!  edge_attr.shape: {data.edge_attr.shape}, max_edge_index: {torch.max(data.edge_paths)}"
+
     return data
