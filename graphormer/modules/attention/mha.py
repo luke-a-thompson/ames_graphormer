@@ -38,10 +38,9 @@ class GraphormerMultiHeadAttention(nn.Module):
         assert data.attention_prior is not None
 
         x = data.normalized_input
-        attention_prior = data.attention_prior
+        prior = data.attention_prior
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
-        prior = attention_prior.view(batch_size, 1, max_subgraph_size, max_subgraph_size)
 
         q_x = self.linear_q(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size)
         k_x = self.linear_k(x).view(batch_size, max_subgraph_size, self.num_heads, self.head_size)
@@ -51,12 +50,13 @@ class GraphormerMultiHeadAttention(nn.Module):
         # n, m: max_subgraph_size
         # h: num_heads
         # d: head_size
-        # (batch_size, num_heads, head_size, max_subgraph_size, max_subgraph_size)
+        # (batch_size, num_heads, max_subgraph_size, max_subgraph_size)
         a = torch.einsum("bnhd,bmhd->bhnm", q_x, k_x)
         pad_mask = torch.all(a == 0, dim=-1)
-        a[pad_mask] = float("-inf")
         a = a * self.scale
+
         a = a + prior
+        a[pad_mask] = float("-inf")
         a = torch.softmax(a, dim=-1)
         a = torch.nan_to_num(a)
         # b: batch_size

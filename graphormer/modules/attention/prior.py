@@ -10,5 +10,5 @@ class AttentionPrior(nn.Module):
     def forward(self, data: ModelData) -> ModelData:
         assert data.spatial_encoding is not None
         assert data.edge_encoding is not None
-        data.attention_prior = data.spatial_encoding + data.edge_encoding
+        data.attention_prior = (data.spatial_encoding + data.edge_encoding).unsqueeze(1).contiguous()
         return data

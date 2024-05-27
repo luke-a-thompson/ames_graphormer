@@ -67,20 +67,50 @@ class GraphormerCollater(Collater):
             [torch.tensor([0]).to(x.device), (subgraph_idxs[:, 1] - subgraph_idxs[:, 0]).square().cumsum(dim=0)]
         )
         subgraph_idxs_sq = torch.stack([subgraph_sq_ptr[:-1], subgraph_sq_ptr[1:]], dim=1)
+        max_nodes = 0
+        path_length = node_paths.shape[-1]
         for idx_range, idx_range_sq in zip(subgraph_idxs.tolist(), subgraph_idxs_sq.tolist()):
             subgraph = x[idx_range[0] : idx_range[1]]
+            num_nodes = idx_range[1] - idx_range[0]
+            if num_nodes > max_nodes:
+                max_nodes = num_nodes
+
             node_subgraphs.append(subgraph)
             degree_subgraphs.append(degrees[idx_range[0] : idx_range[1], :])
+
             start_edge_index = (edge_index[0] < idx_range[0]).sum()
             stop_edge_index = (edge_index[0] < idx_range[1]).sum()
+
             edge_attr_subgraphs.append(edge_attr[start_edge_index:stop_edge_index, :])
-            node_paths_subgraphs.append(node_paths[idx_range_sq[0] : idx_range_sq[1]])
-            edge_paths_subgraphs.append(edge_paths[idx_range_sq[0] : idx_range_sq[1]])
+            node_paths_subgraphs.append(
+                node_paths[idx_range_sq[0] : idx_range_sq[1]].reshape(num_nodes, num_nodes, path_length)
+            )
+            edge_paths_subgraphs.append(
+                edge_paths[idx_range_sq[0] : idx_range_sq[1]].reshape(num_nodes, num_nodes, path_length)
+            )
+        target_shape = (max_nodes, max_nodes, path_length)
+
+        node_subgraphs_padded = []
+        edge_subgraphs_padded = []
+        for node_subgraph, edge_subgraph in zip(node_paths_subgraphs, edge_paths_subgraphs):
+            pad_bottom = target_shape[0] - node_subgraph.shape[0]
+            pad_right = target_shape[1] - node_subgraph.shape[1]
+
+            # (left, right, top, bottom, front, back)
+            pad = (0, pad_right, 0, pad_bottom)
+            node_subgraphs_padded.append(
+                torch.nn.functional.pad(node_subgraph.permute(2, 0, 1), pad, mode="constant", value=-1).permute(1, 2, 0)
+            )
+            edge_subgraphs_padded.append(
+                torch.nn.functional.pad(edge_subgraph.permute(2, 0, 1), pad, mode="constant", value=-1).permute(1, 2, 0)
+            )
+
+        node_paths = torch.stack(node_subgraphs_padded).long()
+        edge_paths = torch.stack(edge_subgraphs_padded).long()
 
         data.x = rnn.pad_sequence(node_subgraphs, batch_first=True, padding_value=-2)
         data.degrees = rnn.pad_sequence(degree_subgraphs, batch_first=True, padding_value=-1).transpose(1, 2).long()
-        assert data.x.shape[1] == data.degrees.shape[2]
         data.edge_attr = rnn.pad_sequence(edge_attr_subgraphs, batch_first=True, padding_value=-1)
-        data.node_paths = rnn.pad_sequence(node_paths_subgraphs, batch_first=True, padding_value=-1)
-        data.edge_paths = rnn.pad_sequence(edge_paths_subgraphs, batch_first=True, padding_value=-1)
+        data.node_paths = node_paths
+        data.edge_paths = edge_paths
         return data

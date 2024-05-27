@@ -63,11 +63,9 @@ class GraphormerFishAttention(nn.Module):
         assert data.normalized_input is not None
         assert data.attention_prior is not None
         x = data.normalized_input
-        attention_prior = data.attention_prior
+        prior = data.attention_prior
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
-        # (batch_size, 1, max_seq_len, max_seq_len)
-        prior = attention_prior.view(batch_size, max_subgraph_size, max_subgraph_size, 1).contiguous()
 
         global_q_x = (
             self.global_q(x).contiguous().view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size)
@@ -96,7 +94,7 @@ class GraphormerFishAttention(nn.Module):
         # g: num_global_heads
         # l: num_local_heads
         # d: head_size
-        # (batch_size, , max_seq_len, max_seq_len, num_local_heads)
+        # (batch_size, max_seq_len, max_seq_len, num_local_heads)
         a = self.global_to_local_proj(a)
         a *= self.scale
         a += prior
