@@ -41,8 +41,11 @@ class GraphormerFishAttention(nn.Module):
         self.att_dropout = nn.Dropout(dropout_rate)
 
         self.sigma = nn.Parameter(0.1 * torch.ones(self.num_global_heads, requires_grad=True))
-        self.p = nn.Parameter(torch.randn(self.num_global_heads, self.num_local_heads, requires_grad=True))
-        self.mish = nn.Mish()
+        self.global_to_local_proj = nn.Sequential(
+            nn.Linear(self.num_global_heads, self.num_local_heads),
+            nn.Mish(),
+            nn.Linear(self.num_local_heads, self.num_local_heads),
+        )
 
         self.linear_out = nn.Linear(self.num_local_heads * self.head_size, self.hidden_dim, bias=False)
 
@@ -60,11 +63,11 @@ class GraphormerFishAttention(nn.Module):
         assert data.normalized_input is not None
         assert data.attention_prior is not None
         x = data.normalized_input
-        prior = data.attention_prior
+        attention_prior = data.attention_prior
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
         # (batch_size, 1, max_seq_len, max_seq_len)
-        bias = prior.view(batch_size, 1, max_subgraph_size, max_subgraph_size).contiguous()
+        prior = attention_prior.view(batch_size, max_subgraph_size, max_subgraph_size, 1).contiguous()
 
         global_q_x = (
             self.global_q(x).contiguous().view(batch_size, max_subgraph_size, self.num_global_heads, self.head_size)
@@ -74,16 +77,16 @@ class GraphormerFishAttention(nn.Module):
         )
         v_x = self.local_v(x).contiguous().view(batch_size, max_subgraph_size, self.num_local_heads, self.head_size)
 
+        # (1, num_global_heads, 1, 1)
+        sigma_sq = self.sigma.square().reshape(1, 1, 1, self.num_global_heads).contiguous()
+
         # b: batch_size
         # n, m: max_subgraph_size
         # g: num_global_heads
-        # (batch_size, num_global_heads, max_seq_len, max_seq_len)
-        g_k = torch.einsum("bngd,bmgd->bgnm", global_q_x, global_k_x)
+        # (batch_size, max_seq_len, max_seq_len, num_global_heads)
+        g_k = torch.einsum("bngd,bmgd->bnmg", global_q_x, global_k_x)
         eps = torch.randn_like(g_k).to(x.device)
         pad_mask = torch.all(g_k == 0, dim=-1)
-        # (1, num_global_heads, 1, 1)
-        sigma_sq = self.sigma.square().reshape(1, self.num_global_heads, 1, 1).contiguous()
-        # (batch_size, num_global_heads, head_size, max_seq_len, max_seq_len)
         sigma_eps = sigma_sq * eps
         a = g_k + sigma_eps
         a[pad_mask, :] = 0.0
@@ -93,15 +96,12 @@ class GraphormerFishAttention(nn.Module):
         # g: num_global_heads
         # l: num_local_heads
         # d: head_size
-        # (batch_size, num_local_heads, max_seq_len, max_seq_len)
-        a = torch.einsum("bgnm,gl->blnm", a, self.p)
-
-        pad_mask = torch.all(a == 0, dim=-1)
-        a = self.mish(a)
+        # (batch_size, , max_seq_len, max_seq_len, num_local_heads)
+        a = self.global_to_local_proj(a)
         a *= self.scale
-        a += bias
-
+        a += prior
         a[pad_mask] = float("-inf")
+
         a = torch.softmax(a, dim=-1)
         a = torch.nan_to_num(a)
 
@@ -111,7 +111,7 @@ class GraphormerFishAttention(nn.Module):
         # l: num_local_heads
         # d: head_size
         # (batch_size, max_subgraph_size, num_local_heads, head_size)
-        a = torch.einsum("blnm,bmld->bnld", a, v_x)
+        a = torch.einsum("bnml,bmld->bnld", a, v_x)
         a = self.att_dropout(a)
         attn = a.reshape(batch_size, max_subgraph_size, self.num_local_heads * self.head_size).contiguous()
         data.attention_output = self.linear_out(attn)

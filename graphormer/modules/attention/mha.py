@@ -26,7 +26,7 @@ class GraphormerMultiHeadAttention(nn.Module):
         self.linear_v = nn.Linear(self.hidden_dim, self.hidden_dim, bias=True)
         self.att_dropout = nn.Dropout(dropout_rate)
 
-        self.linear_out = nn.Linear(self.hidden_dim, self.hidden_dim, bias=True)
+        self.linear_out = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
 
     def forward(self, data: ModelData) -> ModelData:
         """
@@ -52,9 +52,11 @@ class GraphormerMultiHeadAttention(nn.Module):
         # h: num_heads
         # d: head_size
         # (batch_size, num_heads, head_size, max_subgraph_size, max_subgraph_size)
-        a = torch.einsum("bnhd,bmhd->bhnm", q_x, k_x) * self.scale + prior
+        a = torch.einsum("bnhd,bmhd->bhnm", q_x, k_x)
         pad_mask = torch.all(a == 0, dim=-1)
         a[pad_mask] = float("-inf")
+        a = a * self.scale
+        a = a + prior
         a = torch.softmax(a, dim=-1)
         a = torch.nan_to_num(a)
         # b: batch_size
