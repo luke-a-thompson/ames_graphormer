@@ -134,7 +134,7 @@ class SchedulerConfig:
     def build(self, optimizer: Optimizer) -> LRScheduler:
         match self.scheduler_type:
             case SchedulerType.FIXED:
-                return ConstantLR(optimizer, total_iters=10000000)
+                return ConstantLR(optimizer, factor=1.0, total_iters=10000000)
             case SchedulerType.POLYNOMIAL:
                 if self.total_iters is None:
                     raise AttributeError("Total Iters not defined for PolynomialLR scheduler")

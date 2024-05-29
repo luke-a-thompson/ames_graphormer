@@ -1,5 +1,6 @@
 import os
 from typing import Any, Dict, List, Optional, Self
+import click
 import torch
 import datetime
 from random import random
@@ -17,6 +18,88 @@ from graphormer.config.options import (
     SchedulerType,
     OptimizerType,
     NormType,
+)
+from graphormer.utils import create_composite_decorator, configure
+
+
+hyperparameters = create_composite_decorator(
+    click.option(
+        "-c",
+        "--config",
+        type=click.Path(dir_okay=False),
+        is_eager=True,
+        expose_value=False,
+        help="Read option values from the specified config file",
+        callback=configure,
+        default="default_hparams.toml",
+    ),
+    click.option("--datadir", default="data"),
+    click.option("--logdir", default="runs"),
+    click.option("--dataset", type=click.Choice(DatasetType, case_sensitive=False), default=DatasetType.HONMA),  # type: ignore
+    click.option("--num_layers", default=3),
+    click.option("--hidden_dim", default=128),
+    click.option("--edge_embedding_dim", default=128),
+    click.option("--ffn_hidden_dim", default=80),
+    click.option("--n_heads", default=4),
+    click.option("--heads_by_layer", multiple=True, default=[], type=click.INT),
+    click.option("--max_in_degree", default=5),
+    click.option("--max_out_degree", default=5),
+    click.option("--max_path_distance", default=5),
+    click.option("--residual_type", type=click.Choice(ResidualType, case_sensitive=False), default=ResidualType.PRENORM),  # type: ignore
+    click.option("--test_size", default=0.8),
+    click.option("--random_state", default=None, type=click.INT),
+    click.option("--batch_size", default=16),
+    click.option("--lr", default=3e-4),
+    click.option("--b1", default=0.9),
+    click.option("--b2", default=0.999),
+    click.option("--weight_decay", default=0.0),
+    click.option("--eps", default=1e-8),
+    click.option("--nesterov", default=False),
+    click.option("--momentum", default=0.0),
+    click.option("--dampening", default=0.0),
+    click.option("--clip_grad_norm", default=5.0),
+    click.option("--torch_device", default="cuda"),
+    click.option("--epochs", default=10),
+    click.option("--lr_power", default=0.5),
+    click.option(
+        "--scheduler_type",
+        type=click.Choice(SchedulerType, case_sensitive=False),  # type: ignore
+        default=SchedulerType.GREEDY,
+    ),
+    click.option("--optimizer_type", type=click.Choice(OptimizerType, case_sensitive=False), default=OptimizerType.ADAMW),  # type: ignore
+    click.option("--lr_patience", default=4),
+    click.option("--lr_cooldown", default=2),
+    click.option("--lr_min", default=1e-6),
+    click.option("--lr_max", default=1e-3),
+    click.option("--lr_warmup", default=2),
+    click.option("--lr_smooth", default=True),
+    click.option("--lr_window", default=10),
+    click.option("--lr_reset", default=0),
+    click.option("--lr_factor", default=0.5),
+    click.option("--pct_start", default=0.3),
+    click.option("--div_factor", default=25),
+    click.option("--final_div_factor", default=1e4),
+    click.option("--cycle_momentum", default=True),
+    click.option("--three_phase", default=False),
+    click.option("--max_momentum", default=0.95),
+    click.option("--base_momentum", default=0.85),
+    click.option("--last_effective_batch_num", default=-1),
+    click.option("--anneal_strategy", default="cos"),
+    click.option("--name", default=None),
+    click.option("--checkpt_save_interval", default=5),
+    click.option("--accumulation_steps", default=1),
+    click.option("--loss_reduction", type=click.Choice(LossReductionType, case_sensitive=False), default=LossReductionType.MEAN),  # type: ignore
+    click.option("--checkpoint_dir", default="pretrained_models"),
+    click.option("--dropout", default=0.05),
+    click.option("--norm_type", type=click.Choice(NormType, case_sensitive=False), default=NormType.LAYER),  # type: ignore
+    click.option("--attention_type", type=click.Choice(AttentionType, case_sensitive=False), default=AttentionType.MHA),  # type: ignore
+    click.option("--n_global_heads", default=4),
+    click.option("--n_local_heads", default=8),
+    click.option("--global_heads_by_layer", multiple=True, default=[], type=click.INT),
+    click.option("--local_heads_by_layer", multiple=True, default=[], type=click.INT),
+    click.option("--flush_secs", default=5),
+    click.option("--num_workers", default=4),
+    click.option("--prefetch_factor", default=16),
 )
 
 
@@ -105,13 +188,27 @@ class HyperparameterConfig:
         write_to_disk: Optional[bool] = None,
         filename_suffix: Optional[str] = None,
     ):
+        # Global Parameters
         if name is None:
             name = f"model_{datetime.datetime.now().strftime("%d-%m-%y-%H-%M")}"
+        self.name = name
+        self.random_state = random_state
+        self.torch_device = torch_device
         self.best_loss = best_loss
+        # Data Parameters
         self.datadir = datadir
         self.dataset = dataset
         self.batch_size = batch_size
+        self.accumulation_steps = accumulation_steps
         self.max_path_distance = max_path_distance
+        self.node_feature_dim = node_feature_dim
+        self.edge_feature_dim = edge_feature_dim
+        self.test_size = test_size
+        self.tune_size = tune_size
+        self.output_dim = output_dim
+        self.num_workers = num_workers
+        self.prefetch_factor = prefetch_factor
+        # Model Parameters
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
         self.edge_embedding_dim = edge_embedding_dim
@@ -124,20 +221,23 @@ class HyperparameterConfig:
         self.local_heads_by_layer = local_heads_by_layer
         self.max_in_degree = max_in_degree
         self.max_out_degree = max_out_degree
-        self.output_dim = output_dim
-        self.node_feature_dim = node_feature_dim
-        self.edge_feature_dim = edge_feature_dim
-        self.test_size = test_size
-        self.tune_size = tune_size
-        self.random_state = random_state
+        self.norm_type = norm_type
+        self.attention_type = attention_type
+        self.residual_type = residual_type
+        self.dropout = dropout
+        # Optimizer Parameters
+        self.optimizer_type = optimizer_type
+        self.momentum = momentum
+        self.nesterov = nesterov
+        self.dampening = dampening
         self.lr = lr
         self.b1 = b1
         self.b2 = b2
         self.weight_decay = weight_decay
         self.eps = eps
         self.clip_grad_norm = clip_grad_norm
-        self.torch_device = torch_device
-        self.epochs = epochs
+        self.loss_reduction = loss_reduction
+        # Scheduler Parameters
         self.lr_power = lr_power
         self.scheduler_type = scheduler_type
         self.lr_patience = lr_patience
@@ -158,14 +258,12 @@ class HyperparameterConfig:
         self.base_momentum = base_momentum
         self.last_effective_batch_num = last_effective_batch_num
         self.anneal_strategy = anneal_strategy
+        # Training Parameters
+        self.start_epoch = start_epoch
+        self.epochs = epochs
         self.checkpt_save_interval = checkpt_save_interval
-        self.accumulation_steps = accumulation_steps
-        self.loss_reduction = loss_reduction
-        self.name = name
-        self.optimizer_type = optimizer_type
-        self.momentum = momentum
-        self.nesterov = nesterov
-        self.dampening = dampening
+        self.checkpoint_dir = checkpoint_dir
+        # Logging Parameters
         self.logdir = logdir
         self.flush_secs = flush_secs
         self.purge_step = purge_step
@@ -173,14 +271,6 @@ class HyperparameterConfig:
         self.max_queue = max_queue
         self.write_to_disk = write_to_disk
         self.filename_suffix = filename_suffix
-        self.start_epoch = start_epoch
-        self.checkpoint_dir = checkpoint_dir
-        self.dropout = dropout
-        self.norm_type = norm_type
-        self.attention_type = attention_type
-        self.num_workers = num_workers
-        self.prefetch_factor = prefetch_factor
-        self.residual_type = residual_type
 
         self.model_state_dict = None
         self.optimizer_state_dict = None

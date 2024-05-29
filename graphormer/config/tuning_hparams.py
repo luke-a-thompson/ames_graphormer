@@ -1,7 +1,8 @@
 from typing import List, Optional
+import click
 from random import random
 from graphormer.config.data import DataConfig
-from graphormer.config.hparams import HyperparameterConfig
+from graphormer.config.hparams import HyperparameterConfig, hyperparameters
 from graphormer.config.options import (
     AttentionType,
     DatasetType,
@@ -12,6 +13,63 @@ from graphormer.config.options import (
     NormType,
 )
 from optuna.trial import Trial
+
+from graphormer.utils import create_composite_decorator, configure
+
+tuning_hyperparameters = create_composite_decorator(
+    hyperparameters,
+    click.option(
+        "-c",
+        "--config",
+        type=click.Path(dir_okay=False),
+        is_eager=True,
+        expose_value=False,
+        help="Read option values from the specified config file",
+        callback=configure,
+        default="default_tuning_hparams.toml",
+    ),
+    click.option("--logdir", default="optuna_runs"),
+    click.option("--max_in_degree", default=5),
+    click.option("--max_out_degree", default=5),
+    click.option("--max_path_distance", default=5),
+    click.option("--min_b1", default=0.7),
+    click.option("--max_b1", default=0.99),
+    click.option("--min_b2", default=0.99),
+    click.option("--max_b2", default=0.9999),
+    click.option("--min_weight_decay", default=0.0),
+    click.option("--max_weight_decay", default=1e-3),
+    click.option("--min_eps", default=1e-10),
+    click.option("--max_eps", default=1e-7),
+    click.option("--min_momentum", default=0.0),
+    click.option("--max_momentum", default=1.0),
+    click.option("--min_dampening", default=0.0),
+    click.option("--max_dampening", default=1.0),
+    click.option("--min_clip_grad_norm", default=1.0),
+    click.option("--max_clip_grad_norm", default=7.0),
+    click.option("--min_lr_power", default=0.1),
+    click.option("--max_lr_power", default=0.9),
+    click.option("--min_lr_patience", default=0),
+    click.option("--max_lr_patience", default=5),
+    click.option("--min_lr_cooldown", default=0),
+    click.option("--max_lr_cooldown", default=3),
+    click.option("--min_lr_min", default=1e-7),
+    click.option("--max_lr_min", default=3e-5),
+    click.option("--min_lr_max", default=1e-4),
+    click.option("--max_lr_max", default=1e-2),
+    click.option("--min_lr_warmup", default=0),
+    click.option("--max_lr_warmup", default=3),
+    click.option("--min_lr_window", default=1),
+    click.option("--max_lr_window", default=5),
+    click.option("--min_lr_reset", default=0),
+    click.option("--max_lr_reset", default=7),
+    click.option("--min_lr_factor", default=0.1),
+    click.option("--max_lr_factor", default=0.9),
+    click.option("--study_name", default=None),
+    click.option("--min_dropout", default=0.0),
+    click.option("--max_dropout", default=0.5),
+    click.option("--tune_size", default=0.25),
+    click.option("--n_trials", default=10000),
+)
 
 
 class TuningHyperparameterConfig:

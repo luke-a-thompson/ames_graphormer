@@ -1,4 +1,5 @@
 import torch
+import tomllib
 
 
 def difference_idxs(a, b, epsilon=1e-6) -> torch.Tensor:
@@ -17,3 +18,17 @@ def difference_idxs(a, b, epsilon=1e-6) -> torch.Tensor:
 def parse_models(ctx, param, value):
     return value.split(",")
 
+
+def create_composite_decorator(*decorators):
+    def composite_decorator(f):
+        for d in reversed(decorators):
+            f = d(f)
+        return f
+
+    return composite_decorator
+
+
+def configure(ctx, param, filename):
+    with open(filename, "rb") as f:
+        config = tomllib.load(f)
+    ctx.default_map = config
