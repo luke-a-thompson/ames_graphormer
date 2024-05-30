@@ -1,11 +1,12 @@
 import pandas as pd
 from typing import List, Dict, Tuple, Optional
+from pathlib import Path
 from sklearn.calibration import CalibrationDisplay
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import friedmanchisquare
 from scikit_posthocs import posthoc_conover_friedman
-from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import balanced_accuracy_score, f1_score
 import os
 
 
@@ -23,7 +24,7 @@ def save_results(results_dict: Dict[int, Dict[str, List[float] | int]], model_na
     plot_calibration_curve(results_df, model_name, model_results_path, mc_samples)
     save_mc_bacs(results_df, model_name, global_results_path)
 
-    print(f"Predictions, calibration curve, BACs saved to {model_results_path}")
+    print(f"Predictions, calibration curve, BACs, F1s, saved to {model_results_path}")
 
 
 def plot_calibration_curve(df: pd.DataFrame, model_name: str, save_path: str, mc_dropout: bool = True) -> None:
@@ -85,8 +86,11 @@ def save_mc_bacs(df: pd.DataFrame, model_name: str, global_results_path: str) ->
         None
     """
     bac_list = []
+    f1_list = []
+
     df = df.T
     bac_csv = os.path.join(global_results_path, "MC_BACs.csv")
+    f1_csv = os.path.join(global_results_path, "MC_F1s.csv")
 
     preds_df = pd.DataFrame(df["preds"].tolist(), index=df.index)  # Preds_df has a col for each mc sample
     preds_df.columns = [f"mc_sample_{i+1}" for i in preds_df.columns]
@@ -98,29 +102,26 @@ def save_mc_bacs(df: pd.DataFrame, model_name: str, global_results_path: str) ->
     for sample in range(mc_samples):
         mc_sample = df[f"mc_sample_{sample+1}"]
         prediction = [1 if x >= 0.5 else 0 for x in mc_sample]
+
         bac = balanced_accuracy_score(df["label"].astype(int), prediction)
+        f1 = f1_score(df["label"].astype(int), prediction)
+
         bac_list.append(bac)
+        f1_list.append(f1)
 
     bac_scores_df = pd.DataFrame(
         [bac_list], columns=[f"mc_sample_{i+1}" for i in range(mc_samples)], index=[model_name]
     )
 
-    if os.path.exists(bac_csv):
-        existing_df = pd.read_csv(bac_csv, index_col=0)
-        if len(existing_df.columns) != len(bac_scores_df.columns):
-            raise ValueError(
-                f"Existing BAC scores in {bac_csv} have {len(existing_df.columns)} MC_sample columns, while new BAC scores from {model_name} have {len(bac_scores_df.columns)} MC_sample columns."
-            )
-        print(f"BAC scores of {model_name} appended to {bac_csv}")
-        updated_df = pd.concat([existing_df, bac_scores_df])
-    else:
-        print(f"{bac_csv} does not exist - Now creating")
-        updated_df = bac_scores_df
+    f1_scores_df = pd.DataFrame([f1_list], columns=[f"mc_sample_{i+1}" for i in range(mc_samples)], index=[model_name])
 
-    updated_df.to_csv(bac_csv)
+    update_or_create_csv(bac_csv, bac_scores_df, model_name)
+    update_or_create_csv(f1_csv, f1_scores_df, model_name)
 
 
-def friedman_from_bac_csv(bac_csv_path: str, models_to_friedman: list, alpha: float = 0.05) -> Tuple[float, float, Optional[pd.DataFrame]]:
+def friedman_from_bac_csv(
+    bac_csv_path: str, models_to_friedman: list, alpha: float = 0.05
+) -> Tuple[float, float, Optional[pd.DataFrame]]:
     bac_df = pd.read_csv(bac_csv_path, index_col=0)
     model_rows = {}
 
@@ -130,14 +131,14 @@ def friedman_from_bac_csv(bac_csv_path: str, models_to_friedman: list, alpha: fl
 
     stat, p = friedmanchisquare(*model_rows.values())
 
-    print('Statistics=%.3f, p=%.3f' % (stat, p))
+    print("Statistics=%.3f, p=%.3f" % (stat, p))
 
     if p < alpha:
-        print('Different distributions (reject H0) - Performing post hoc test')
+        print("Different distributions (reject H0) - Performing post hoc test")
         posthoc_results_df = posthoc_conover_friedman(bac_df.T)
         return stat, p, posthoc_results_df
     else:
-        print('Same distributions (fail to reject H0) - No need for post hoc')
+        print("Same distributions (fail to reject H0) - No need for post hoc")
         return stat, p
 
 
@@ -147,3 +148,19 @@ def get_cis(mcd_df: pd.DataFrame, confidence_level: float = 0.95):
     mcd_df["upper_ci"] = mcd_df["preds"].apply(lambda x: np.percentile(x, (1 + confidence_level) / 2 * 100))
 
     return mcd_df
+
+
+def update_or_create_csv(file_path: str, new_df: pd.DataFrame, model_name: str) -> None:
+    if os.path.exists(file_path):
+        existing_df = pd.read_csv(file_path, index_col=0)
+        if len(existing_df.columns) != len(new_df.columns):
+            raise ValueError(
+                f"Existing scores in {file_path} have {len(existing_df.columns)} MC_sample columns, while new scores from {model_name} have {len(new_df.columns)} MC_sample columns."
+            )
+        print(f"Scores of {model_name} appended to {file_path}")
+        updated_df = pd.concat([existing_df, new_df])
+    else:
+        print(f"{file_path} does not exist - Now creating")
+        updated_df = new_df
+
+    updated_df.to_csv(file_path)

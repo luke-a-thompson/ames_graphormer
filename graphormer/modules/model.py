@@ -23,11 +23,13 @@ class Graphormer(nn.Module):
         self.net = nn.Sequential(modules)
         self.apply(Graphormer._init_weights)
 
-    def enable_dropout(self):
-        """Function to enable the dropout layers during test-time"""
+    def enable_dropout(self, dropout_rate: float) -> None:
+        """Function to enable the dropout layers during test-time for Monte Carlo dropout."""
         for m in self.modules():
             if m.__class__.__name__.startswith("Dropout"):
                 m.train()
+                if dropout_rate is not None:
+                    m.p = dropout_rate
 
     @classmethod
     def _init_weights(cls, m: nn.Module):

@@ -20,6 +20,7 @@ def inference_model(
     model_config = hparam_config.model_config()
 
     mc_dropout = mc_samples is not None
+    mc_dropout_rate = 0.1
 
     _, inference_loader = data_config.build()
     del _
@@ -44,7 +45,7 @@ def inference_model(
     model.eval()
     if mc_dropout:
 
-        model.enable_dropout()
+        model.enable_dropout(mc_dropout_rate)
         for mc_sample in tqdm(range(mc_samples), desc="MC Dropout Inference", unit="mc_sample"):
             for batch_idx, batch in enumerate(inference_loader):
                 sample_idx: int = batch_idx * hparam_config.batch_size
