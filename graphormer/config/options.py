@@ -21,6 +21,11 @@ class DatasetType(str, Enum):
     OGBG_MOLPCBA = "ogbg-molpcba"
 
 
+class DatasetRegime(str, Enum):
+    TRAIN = "Train"
+    TEST = "Test"
+
+
 class LossReductionType(str, Enum):
     SUM = "sum"
     MEAN = "mean"

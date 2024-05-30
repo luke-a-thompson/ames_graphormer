@@ -11,6 +11,7 @@ from graphormer.config.hparams import HyperparameterConfig, hyperparameters
 from graphormer.config.options import (
     OptimizerType,
     DatasetType,
+    DatasetRegime,
 )
 from graphormer.config.tuning_hparams import TuningHyperparameterConfig, tuning_hyperparameters
 from graphormer.inference import inference_model
@@ -176,7 +177,7 @@ def tune(**kwargs):
 @click.option("--batch_size", default=4)
 @click.option("--torch_device", default="cuda")
 def inference(mc_samples: Optional[int], **kwargs):
-    hparam_config = HyperparameterConfig(**kwargs)
+    hparam_config = HyperparameterConfig(dataset_regime=DatasetRegime.TEST, **kwargs)
     hparam_config.load_for_inference()
     print(hparam_config)
     torch.manual_seed(hparam_config.random_state)

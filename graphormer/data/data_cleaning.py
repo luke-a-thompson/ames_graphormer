@@ -4,7 +4,7 @@ from graphormer.functional import shortest_path_distance
 from rdkit import Chem
 
 
-def check_smiles_and_label(smiles, label):
+def check_smiles_and_label(smiles, label) -> None:
     if torch.isnan(label):
         return f"WARN: No label for {smiles}, skipped"
 
@@ -15,7 +15,7 @@ def check_smiles_and_label(smiles, label):
     return None
 
 
-def process(data, max_distance):
+def process(data, max_distance: int):
 
     node_paths, edge_paths, extra_edge_idxs = shortest_path_distance(data.edge_index, max_distance)
 

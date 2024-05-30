@@ -14,6 +14,7 @@ from graphormer.config.options import (
     AttentionType,
     LossReductionType,
     DatasetType,
+    DatasetRegime,
     ResidualType,
     SchedulerType,
     OptimizerType,
@@ -36,6 +37,7 @@ hyperparameters = create_composite_decorator(
     click.option("--datadir", default="data"),
     click.option("--logdir", default="runs"),
     click.option("--dataset", type=click.Choice(DatasetType, case_sensitive=False), default=DatasetType.HONMA),  # type: ignore
+    click.option("--dataset_regime", type=click.Choice(DatasetRegime, case_sensitive=False), default=DatasetRegime.TRAIN),  # type: ignore
     click.option("--num_layers", default=3),
     click.option("--hidden_dim", default=128),
     click.option("--edge_embedding_dim", default=128),
@@ -114,6 +116,7 @@ class HyperparameterConfig:
         # Data Parameters
         datadir: Optional[str] = None,
         dataset: Optional[DatasetType] = None,
+        dataset_regime: Optional[DatasetRegime] = None,
         batch_size: Optional[int] = None,
         max_path_distance: Optional[int] = None,
         node_feature_dim: Optional[int] = None,
@@ -198,6 +201,7 @@ class HyperparameterConfig:
         # Data Parameters
         self.datadir = datadir
         self.dataset = dataset
+        self.dataset_regime = dataset_regime
         self.batch_size = batch_size
         self.accumulation_steps = accumulation_steps
         self.max_path_distance = max_path_distance
@@ -280,6 +284,8 @@ class HyperparameterConfig:
     def data_config(self) -> DataConfig:
         if self.dataset is None:
             raise AttributeError("dataset not defined for DataConfig")
+        if self.dataset_regime is None:
+            raise AttributeError("dataset not defined for DataConfig")
         if self.batch_size is None:
             raise AttributeError("batch_size not defined for DataConfig")
         if self.datadir is None:
@@ -287,7 +293,7 @@ class HyperparameterConfig:
         if self.max_path_distance is None:
             raise AttributeError("max_path_distance is not defined for DataConfig")
 
-        config = DataConfig(self.dataset, self.batch_size, self.datadir, self.max_path_distance)
+        config = DataConfig(self.dataset, self.dataset_regime, self.batch_size, self.datadir, self.max_path_distance)
 
         if self.test_size is not None:
             config = config.with_test_size(self.test_size)

@@ -1,13 +1,14 @@
 from typing import Self, Tuple
 from torch.utils.data import Subset
 from sklearn.model_selection import train_test_split
-from graphormer.config.options import DatasetType
+from graphormer.config.options import DatasetType, DatasetRegime
 from graphormer.data.dataloader import GraphormerDataLoader
 
 
 class DataConfig:
-    def __init__(self, dataset_type: DatasetType, batch_size: int, data_dir: str, max_path_distance: int):
+    def __init__(self, dataset_type: DatasetType, dataset_regime: DatasetRegime, batch_size: int, data_dir: str, max_path_distance: int):
         self.dataset_type = dataset_type
+        self.dataset_regime = dataset_regime
         self.batch_size = batch_size
         self.data_dir = data_dir
         self.max_path_distance = max_path_distance
@@ -82,8 +83,24 @@ class DataConfig:
                 self.num_classes = dataset.num_classes
 
                 # len(Honma) = 13730
-                train_loader = GraphormerDataLoader(dataset[:12140], batch_size=self.batch_size, shuffle=True, **dataloader_optimization_params)  # type: ignore
-                test_loader = GraphormerDataLoader(dataset[12140:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+                if self.dataset_regime == "Test":
+                    test_loader = GraphormerDataLoader(dataset[12140:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+                    return test_loader
+
+                test_ids, train_ids = train_test_split(
+                    range(len(dataset[:12140])), test_size=self.test_size, random_state=self.random_state
+                )
+                train_loader = GraphormerDataLoader(
+                    Subset(dataset, train_ids),  # type: ignore
+                    batch_size=self.batch_size,
+                    shuffle=True,
+                    **dataloader_optimization_params,
+                )
+                test_loader = GraphormerDataLoader(
+                    Subset(dataset, test_ids),  # type: ignore
+                    batch_size=self.batch_size,
+                    **dataloader_optimization_params,
+                )
 
                 return train_loader, test_loader
 
@@ -96,8 +113,24 @@ class DataConfig:
                 self.num_classes = dataset.num_classes
 
                 # len(Combined) = 20242
-                train_loader = GraphormerDataLoader(dataset[:18652], batch_size=self.batch_size, shuffle=True, **dataloader_optimization_params)  # type: ignore
-                test_loader = GraphormerDataLoader(dataset[18652:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+                if self.dataset_regime == "Test":
+                    test_loader = GraphormerDataLoader(dataset[18652:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+                    return test_loader
+
+                test_ids, train_ids = train_test_split(
+                    range(len(dataset[:18652])), test_size=self.test_size, random_state=self.random_state
+                )
+                train_loader = GraphormerDataLoader(
+                    Subset(dataset, train_ids),  # type: ignore
+                    batch_size=self.batch_size,
+                    shuffle=True,
+                    **dataloader_optimization_params,
+                )
+                test_loader = GraphormerDataLoader(
+                    Subset(dataset, test_ids),  # type: ignore
+                    batch_size=self.batch_size,
+                    **dataloader_optimization_params,
+                )
 
                 return train_loader, test_loader
 

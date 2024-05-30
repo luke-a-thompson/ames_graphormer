@@ -22,8 +22,7 @@ def inference_model(
     mc_dropout = mc_samples is not None
     mc_dropout_rate = 0.1
 
-    _, inference_loader = data_config.build()
-    del _
+    inference_loader = data_config.build()
 
     assert hparam_config.batch_size is not None
     assert data_config.num_node_features is not None
