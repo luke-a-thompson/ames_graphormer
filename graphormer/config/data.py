@@ -6,7 +6,14 @@ from graphormer.data.dataloader import GraphormerDataLoader
 
 
 class DataConfig:
-    def __init__(self, dataset_type: DatasetType, dataset_regime: DatasetRegime, batch_size: int, data_dir: str, max_path_distance: int):
+    def __init__(
+        self,
+        dataset_type: DatasetType,
+        dataset_regime: DatasetRegime,
+        batch_size: int,
+        data_dir: str,
+        max_path_distance: int,
+    ):
         self.dataset_type = dataset_type
         self.dataset_regime = dataset_regime
         self.batch_size = batch_size
@@ -57,8 +64,12 @@ class DataConfig:
                 self.num_edge_features = dataset.num_edge_features
                 self.num_classes = dataset.num_classes
 
+                if self.dataset_regime == "Test":
+                    test_loader = GraphormerDataLoader(dataset[6513:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+                    return test_loader
+
                 test_ids, train_ids = train_test_split(
-                    range(len(dataset)), test_size=self.test_size, random_state=self.random_state
+                    range(len(dataset[:6513])), test_size=self.test_size, random_state=self.random_state
                 )
                 train_loader = GraphormerDataLoader(
                     Subset(dataset, train_ids),  # type: ignore
