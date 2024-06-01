@@ -166,19 +166,13 @@ def tune(**kwargs):
 
 
 @click.command()
-@click.option("--datadir", default="data")
-@click.option("--dataset", type=click.Choice(DatasetType, case_sensitive=False), default=DatasetType.HONMA)  # type: ignore
-@click.option("--name", default=None)
+@hyperparameters
 @click.option("--checkpoint_dir", default="pretrained_models")
 @click.option("--mc_samples", default=None, type=click.INT)
-@click.option("--max_path_distance", default=5)
-@click.option("--test_size", default=0.2)
-@click.option("--random_state", default=42)
-@click.option("--batch_size", default=4)
-@click.option("--torch_device", default="cuda")
 def inference(mc_samples: Optional[int], **kwargs):
-    hparam_config = HyperparameterConfig(dataset_regime=DatasetRegime.TEST, **kwargs)
+    hparam_config = HyperparameterConfig(**kwargs)
     hparam_config.load_for_inference()
+    hparam_config.dataset_regime = DatasetRegime.TEST
     print(hparam_config)
     torch.manual_seed(hparam_config.random_state)
     results = inference_model(hparam_config, mc_samples=mc_samples)
