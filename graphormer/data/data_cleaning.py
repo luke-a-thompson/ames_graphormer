@@ -1,10 +1,13 @@
+from typing import Optional
+
 import torch
-from torch_geometric.utils import degree
-from graphormer.functional import shortest_path_distance
 from rdkit import Chem
+from torch_geometric.utils import degree
+
+from graphormer.functional import shortest_path_distance
 
 
-def check_smiles_and_label(smiles, label) -> None:
+def check_smiles_and_label(smiles, label) -> Optional[str]:
     if torch.isnan(label):
         return f"WARN: No label for {smiles}, skipped"
 
