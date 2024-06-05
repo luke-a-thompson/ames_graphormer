@@ -1,28 +1,29 @@
 from typing import List, Optional, Self
-import optuna
-from tensorboardX import SummaryWriter
-import torch
-from torch.optim import Optimizer
-from torch.nn.modules.loss import _Loss
-from tqdm import tqdm
-from sklearn.metrics import accuracy_score, balanced_accuracy_score
-from torch.optim.lr_scheduler import LRScheduler, OneCycleLR, PolynomialLR, ReduceLROnPlateau
 
+import optuna
+import torch
+from optuna.trial import Trial
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
+from tensorboardX import SummaryWriter
+from torch.nn.modules.loss import _Loss
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler, OneCycleLR, PolynomialLR, ReduceLROnPlateau
+from tqdm import tqdm
+
+from graphormer.config.hparams import HyperparameterConfig
+from graphormer.config.options import AttentionType, LossReductionType, ResidualType, SchedulerType
+from graphormer.config.utils import calculate_pos_weight, model_init_print, save_checkpoint
 from graphormer.data.dataloader import GraphormerBatch, GraphormerDataLoader
-from graphormer.config.options import AttentionType, ResidualType, SchedulerType, LossReductionType
 from graphormer.model_analysis import (
     plot_attention_sigma,
-    plot_edge_path_length_bias,
-    plot_node_path_length_bias,
     plot_centrality_in_degree_bias,
     plot_centrality_out_degree_bias,
+    plot_edge_path_length_bias,
     plot_layer_residual_weights,
+    plot_node_path_length_bias,
 )
 from graphormer.modules.model import Graphormer
 from graphormer.schedulers import GreedyLR
-from graphormer.config.utils import calculate_pos_weight, model_init_print, save_checkpoint
-from graphormer.config.hparams import HyperparameterConfig
-from optuna.trial import Trial
 
 
 class Trainer:
@@ -62,6 +63,9 @@ class Trainer:
         data_config = hparam_config.data_config()
         if train_loader is None or test_loader is None:
             train_loader, test_loader = data_config.build()
+
+        assert train_loader is not None
+        assert test_loader is not None
         model_config = hparam_config.model_config()
         loss_config = hparam_config.loss_config()
         optimizer_config = hparam_config.optimizer_config()
@@ -200,14 +204,44 @@ class Trainer:
             self.writer.add_scalar("eval/bac", bac, epoch)
             self.writer.add_scalar("eval/bac_adj", bac_adj, epoch)
             self.writer.add_scalar("eval/avg_eval_loss", avg_eval_loss, epoch)
-            self.writer.add_figure("plot/edge_encoding_bias", plot_edge_path_length_bias(self.model), epoch)  # type: ignore
-            self.writer.add_figure("plot/node_encoding_bias", plot_node_path_length_bias(self.model), epoch)  # type: ignore
-            self.writer.add_figure("plot/centrality_in_degree_bias", plot_centrality_in_degree_bias(self.model), epoch)  # type: ignore
-            self.writer.add_figure("plot/centrality_out_degree_bias", plot_centrality_out_degree_bias(self.model), epoch)  # type: ignore
+            self.writer.add_figure(
+                # type: ignore
+                "plot/edge_encoding_bias",
+                plot_edge_path_length_bias(self.model),
+                epoch,
+            )
+            self.writer.add_figure(
+                # type: ignore
+                "plot/node_encoding_bias",
+                plot_node_path_length_bias(self.model),
+                epoch,
+            )
+            self.writer.add_figure(
+                "plot/centrality_in_degree_bias",
+                # type: ignore
+                plot_centrality_in_degree_bias(self.model),
+                epoch,
+            )
+            self.writer.add_figure(
+                "plot/centrality_out_degree_bias",
+                # type: ignore
+                plot_centrality_out_degree_bias(self.model),
+                epoch,
+            )
             if self.hparam_config.residual_type == ResidualType.REZERO:
-                self.writer.add_figure("plot/residual_weigths", plot_layer_residual_weights(self.model), epoch)  # type: ignore
+                self.writer.add_figure(
+                    # type: ignore
+                    "plot/residual_weigths",
+                    plot_layer_residual_weights(self.model),
+                    epoch,
+                )
             if self.hparam_config.attention_type == AttentionType.FISH:
-                self.writer.add_figure("plot/sigma_strength", plot_attention_sigma(self.model), epoch)  # type: ignore
+                self.writer.add_figure(
+                    # type: ignore
+                    "plot/sigma_strength",
+                    plot_attention_sigma(self.model),
+                    epoch,
+                )
 
             print(
                 f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {

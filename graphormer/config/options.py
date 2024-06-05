@@ -22,8 +22,8 @@ class DatasetType(str, Enum):
 
 
 class DatasetRegime(str, Enum):
-    TRAIN = "Train"
-    TEST = "Test"
+    TRAIN = "train"
+    TEST = "test"
 
 
 class LossReductionType(str, Enum):

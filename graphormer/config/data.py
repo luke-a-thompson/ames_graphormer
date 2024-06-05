@@ -1,7 +1,9 @@
 from typing import Self, Tuple
-from torch.utils.data import Subset
+
 from sklearn.model_selection import train_test_split
-from graphormer.config.options import DatasetType, DatasetRegime
+from torch.utils.data import Subset
+
+from graphormer.config.options import DatasetRegime, DatasetType
 from graphormer.data.dataloader import GraphormerDataLoader
 
 
@@ -43,7 +45,7 @@ class DataConfig:
         self.prefetch_factor = prefect_factor
         return self
 
-    def build(self) -> Tuple[GraphormerDataLoader, GraphormerDataLoader]:
+    def build(self) -> Tuple[GraphormerDataLoader, GraphormerDataLoader] | GraphormerDataLoader:
 
         dataloader_optimization_params = {
             "pin_memory": True,
@@ -64,8 +66,12 @@ class DataConfig:
                 self.num_edge_features = dataset.num_edge_features
                 self.num_classes = dataset.num_classes
 
-                if self.dataset_regime == "Test":
-                    test_loader = GraphormerDataLoader(dataset[6513:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+                if self.dataset_regime == DatasetRegime.TEST:
+                    test_loader = GraphormerDataLoader(
+                        dataset[6513:],  # type: ignore
+                        batch_size=self.batch_size,
+                        **dataloader_optimization_params,
+                    )
                     return test_loader
 
                 test_ids, train_ids = train_test_split(
@@ -94,8 +100,12 @@ class DataConfig:
                 self.num_classes = dataset.num_classes
 
                 # len(Honma) = 13730
-                if self.dataset_regime == "Test":
-                    test_loader = GraphormerDataLoader(dataset[12140:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+                if self.dataset_regime == DatasetRegime.TEST:
+                    test_loader = GraphormerDataLoader(
+                        dataset[12140:],  # type: ignore
+                        batch_size=self.batch_size,
+                        **dataloader_optimization_params,
+                    )
                     return test_loader
 
                 test_ids, train_ids = train_test_split(
@@ -124,8 +134,12 @@ class DataConfig:
                 self.num_classes = dataset.num_classes
 
                 # len(Combined) = 20242
-                if self.dataset_regime == "Test":
-                    test_loader = GraphormerDataLoader(dataset[18652:], batch_size=self.batch_size, **dataloader_optimization_params)  # type: ignore
+                if self.dataset_regime == DatasetRegime.TEST:
+                    test_loader = GraphormerDataLoader(
+                        dataset[18652:],  # type: ignore
+                        batch_size=self.batch_size,
+                        **dataloader_optimization_params,
+                    )
                     return test_loader
 
                 test_ids, train_ids = train_test_split(
@@ -155,13 +169,15 @@ class DataConfig:
                 split_idx = dataset.get_idx_split()
 
                 train_loader = GraphormerDataLoader(
-                    dataset[split_idx["train"]],
+                    dataset[split_idx["train"]],  # type: ignore
                     batch_size=self.batch_size,
                     shuffle=True,
                     **dataloader_optimization_params,
                 )
                 valid_loader = GraphormerDataLoader(
-                    dataset[split_idx["valid"]], batch_size=self.batch_size, **dataloader_optimization_params
+                    dataset[split_idx["valid"]],  # type: ignore
+                    batch_size=self.batch_size,
+                    **dataloader_optimization_params,
                 )
 
                 return train_loader, valid_loader
