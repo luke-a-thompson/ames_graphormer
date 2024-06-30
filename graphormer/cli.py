@@ -24,6 +24,7 @@ from graphormer.train import Trainer
 def train(**kwargs):
     hparam_config = HyperparameterConfig(**kwargs)
     hparam_config.load_from_checkpoint()
+    hparam_config.epochs = kwargs.get("epochs", hparam_config.epochs)  # Allow max epochs override to extend training
     torch.manual_seed(hparam_config.random_state)
     trainer = Trainer.build(hparam_config)
     trainer.fit()
