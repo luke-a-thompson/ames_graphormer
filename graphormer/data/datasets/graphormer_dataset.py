@@ -3,6 +3,7 @@ import torch
 from torch_geometric.data import InMemoryDataset
 from torch_geometric.utils import from_smiles
 from tqdm import tqdm
+import os
 
 from graphormer.data.data_cleaning import check_smiles_and_label, process
 
@@ -31,7 +32,15 @@ class GraphormerDataset(InMemoryDataset):
         Returns:
             None
         """
-        df = pd.read_excel(self.raw_paths[0])
+        file_path = self.raw_paths[0]
+        file_extension = os.path.splitext(file_path)[1]
+
+        if file_extension == ".xlsx":
+            df = pd.read_excel(file_path)
+        elif file_extension == ".csv":
+            df = pd.read_csv(file_path)
+        else:
+            raise ValueError(f"Unsupported file type: {file_extension}")
 
         data_list = []
         warnings = []
