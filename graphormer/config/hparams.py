@@ -91,7 +91,7 @@ hyperparameters = create_composite_decorator(
     click.option("--name", default=None),
     click.option("--checkpt_save_interval", default=5),
     click.option("--accumulation_steps", default=1),
-    click.option("--loss_function", type=click.Choice(LossFunction, case_sensitive=False), multiple=True),  # type: ignore
+    click.option("--loss_function", type=click.Choice(LossFunction, case_sensitive=False), multiple=True, default=[LossFunction.BCE_LOGITS]),  # type: ignore
     click.option("--loss_reduction", type=click.Choice(LossReductionType, case_sensitive=False), default=LossReductionType.MEAN),  # type: ignore
     click.option("--loss_weights", type=click.FLOAT, multiple=True, default=(1,)), # type: ignore
     click.option("--checkpoint_dir", default="pretrained_models"),
