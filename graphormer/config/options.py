@@ -19,11 +19,17 @@ class DatasetType(str, Enum):
     HANSEN = "hansen"
     COMBINED = "combined"
     OGBG_MOLPCBA = "ogbg-molpcba"
+    TOX24 = "tox24"
 
 
 class DatasetRegime(str, Enum):
     TRAIN = "train"
     TEST = "test"
+
+
+class LossFunction(str, Enum):
+    BCE_LOGITS = "bce_logits"
+    MSE = "mse"
 
 
 class LossReductionType(str, Enum):

@@ -10,7 +10,6 @@ import optuna
 from graphormer.config.hparams import HyperparameterConfig, hyperparameters
 from graphormer.config.options import (
     OptimizerType,
-    DatasetType,
     DatasetRegime,
 )
 from graphormer.config.tuning_hparams import TuningHyperparameterConfig, tuning_hyperparameters

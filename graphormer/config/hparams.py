@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, List, Optional, Self
+from typing import Any, Dict, List, Tuple, Optional, Self
 import click
 import torch
 import datetime
@@ -12,6 +12,7 @@ from graphormer.config.optimizer import OptimizerConfig
 from graphormer.config.scheduler import SchedulerConfig
 from graphormer.config.options import (
     AttentionType,
+    LossFunction,
     LossReductionType,
     DatasetType,
     DatasetRegime,
@@ -90,7 +91,9 @@ hyperparameters = create_composite_decorator(
     click.option("--name", default=None),
     click.option("--checkpt_save_interval", default=5),
     click.option("--accumulation_steps", default=1),
+    click.option("--loss_function", type=click.Choice(LossFunction, case_sensitive=False), multiple=True),  # type: ignore
     click.option("--loss_reduction", type=click.Choice(LossReductionType, case_sensitive=False), default=LossReductionType.MEAN),  # type: ignore
+    click.option("--loss_weights", type=click.FLOAT, multiple=True, default=(1,)), # type: ignore
     click.option("--checkpoint_dir", default="pretrained_models"),
     click.option("--dropout", default=0.05),
     click.option("--norm_type", type=click.Choice(NormType, case_sensitive=False), default=NormType.LAYER),  # type: ignore
@@ -154,7 +157,9 @@ class HyperparameterConfig:
         weight_decay: Optional[float] = None,
         eps: Optional[float] = None,
         clip_grad_norm: float = 5.0,
+        loss_function: LossFunction | tuple[LossFunction, ...]= None,
         loss_reduction: Optional[LossReductionType] = None,
+        loss_weights: Optional[Tuple[float, ...]] = None,
         # Scheduler Parameters
         scheduler_type: Optional[SchedulerType] = None,
         lr_power: Optional[float] = None,
@@ -240,7 +245,9 @@ class HyperparameterConfig:
         self.weight_decay = weight_decay
         self.eps = eps
         self.clip_grad_norm = clip_grad_norm
+        self.loss_function = loss_function
         self.loss_reduction = loss_reduction
+        self.loss_weights = loss_weights
         # Scheduler Parameters
         self.lr_power = lr_power
         self.scheduler_type = scheduler_type
@@ -449,12 +456,14 @@ class HyperparameterConfig:
         return config
 
     def loss_config(self) -> LossConfig:
+        if self.loss_function is None:
+            raise AttributeError("loss_function is not defined for LossConfig")
         if self.loss_reduction is None:
             raise AttributeError("loss_reduction is not defined for LossConfig")
         if self.torch_device is None:
             raise AttributeError("torch_device is not defined for LossConfig")
 
-        config = LossConfig(self.loss_reduction, torch.device(self.torch_device))
+        config = LossConfig(self.loss_function, self.loss_reduction, torch.device(self.torch_device))
 
         if self.loss_state_dict is not None:
             config = config.with_state_dict(self.loss_state_dict)

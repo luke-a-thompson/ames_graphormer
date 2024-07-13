@@ -43,7 +43,6 @@ def inference_model(
 
     model.eval()
     if mc_dropout:
-
         model.enable_dropout(mc_dropout_rate)
         for mc_sample in tqdm(range(mc_samples), desc="MC Dropout Inference", unit="mc_sample"):
             for batch_idx, batch in enumerate(inference_loader):

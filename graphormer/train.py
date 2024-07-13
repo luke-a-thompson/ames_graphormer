@@ -84,7 +84,8 @@ class Trainer:
             .to(hparam_config.torch_device)
         )
         pos_weight = calculate_pos_weight(train_loader)
-        loss = loss_config.with_pos_weight(pos_weight).build()
+        loss_weights = hparam_config.loss_weights
+        loss = loss_config.with_pos_weight(pos_weight).with_weights(loss_weights).build()
         optimizer = optimizer_config.build(model)
         if scheduler_config.scheduler_type == SchedulerType.ONE_CYCLE:
             scheduler_config = scheduler_config.with_train_batches_per_epoch(len(train_loader))
@@ -154,7 +155,8 @@ class Trainer:
                 batch_loss = self.train_step(batch, batch_idx, train_batch_num, loss_values, train_batches_per_epoch)
 
                 total_train_loss += batch_loss
-                progress_bar.set_postfix_str(f"Avg Loss: {avg_loss:.4f}")
+                interleaved_list = ", ".join([f"{w}x '{f.value}'" for w, f in zip(self.hparam_config.loss_weights, self.hparam_config.loss_function)])
+                progress_bar.set_postfix_str(f"Avg Loss: {avg_loss:.3f}. Weights: {interleaved_list}")
                 progress_bar.update()  # Increment the progress bar
                 train_batch_num += 1
 
