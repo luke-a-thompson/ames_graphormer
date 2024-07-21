@@ -182,5 +182,39 @@ class DataConfig:
 
                 return train_loader, valid_loader
 
+            case DatasetType.TOX24:
+                from graphormer.data.datasets import Tox24Dataset
+
+                dataset = Tox24Dataset(self.data_dir, max_distance=self.max_path_distance)
+                self.num_node_features = dataset.num_node_features
+                self.num_edge_features = dataset.num_edge_features
+                self.num_classes = dataset.num_classes
+
+                # len(Tox24) = 1513, no labels 1014:
+                if self.dataset_regime == DatasetRegime.TEST:
+                    test_loader = GraphormerDataLoader(
+                        dataset[1014:],  # type: ignore
+                        batch_size=self.batch_size,
+                        **dataloader_optimization_params,
+                    )
+                    return test_loader
+
+                test_ids, train_ids = train_test_split(
+                    range(len(dataset[:1013])), test_size=self.test_size, random_state=self.random_state
+                )
+                train_loader = GraphormerDataLoader(
+                    Subset(dataset, train_ids),  # type: ignore
+                    batch_size=self.batch_size,
+                    shuffle=True,
+                    **dataloader_optimization_params,
+                )
+                test_loader = GraphormerDataLoader(
+                    Subset(dataset, test_ids),  # type: ignore
+                    batch_size=self.batch_size,
+                    **dataloader_optimization_params,
+                )
+
+                return train_loader, test_loader
+
     def __str__(self) -> str:
         return f"{self.dataset_type} dataset"
