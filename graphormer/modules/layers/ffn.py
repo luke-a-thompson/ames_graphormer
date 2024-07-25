@@ -8,7 +8,7 @@ class FeedForwardNetwork(nn.Module):
         super(FeedForwardNetwork, self).__init__()
 
         self.layer1 = nn.Linear(in_dim, hidden_dim)
-        self.gelu = nn.GELU(approximate="tanh")
+        self.gelu = nn.GELU()
         self.dropout = nn.Dropout(dropout_rate)
         self.layer2 = nn.Linear(hidden_dim, out_dim)
 
