@@ -1,34 +1,42 @@
-dataset = "Honma"
-batch_size = 128
+# Stats:
+# Min Eval Loss: 0.9559
+# Max Eval BAC: 75.27%
+# Global
+name = "best"
+random_state = 42
+torch_device = "cuda"
+checkpt_save_interval = 1
+epochs = 100
+
+# Dataset
+dataset = "honma"
+batch_size = 32
+accumulation_steps = 1
+max_path_distance = 5
+num_workers = 4
+prefetch_factor = 2
+
+# Model
 num_layers = 3
 hidden_dim = 128
 edge_embedding_dim = 128
 ffn_hidden_dim = 80
 n_heads = 4
-max_in_degree = 5
-max_out_degree = 5
-max_path_distance = 5
-test_size = 0.8
-random_state = 42
-lr = 0.0003
+attention_type = "mha"
+residual_type = "prenorm"
+norm_type = "layer"
+
+# Optimizer
+optimizer_type = "adam"
+lr = 1.9e-04
 b1 = 0.9
 b2 = 0.999
 weight_decay = 0.0
 eps = 1e-08
 clip_grad_norm = 5.0
-torch_device = "cuda"
-epochs = 10
-lr_power = 0.5
-scheduler_type = "greedy"
-lr_patience = 4
-lr_cooldown = 2
-lr_min = 1e-06
-lr_max = 0.001
-lr_warmup = 2
-lr_smooth = true
-lr_window = 10
-lr_reset = 0
-lr_factor = 0.5
 loss_reduction = "mean"
-accumulation_steps = 1
-norm_type = "layer"
+dropout = 0.05
+
+# Scheduler
+scheduler_type = "polynomial"
+lr_power = 0.5

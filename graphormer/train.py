@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import LRScheduler, OneCycleLR, PolynomialLR, Redu
 from tqdm import tqdm
 
 from graphormer.config.hparams import HyperparameterConfig
-from graphormer.config.options import AttentionType, LossReductionType, ResidualType, SchedulerType
+from graphormer.config.options import AttentionType, LossReductionType, ResidualType, SchedulerType, LossFunction
 from graphormer.config.utils import calculate_pos_weight, model_init_print, save_checkpoint
 from graphormer.data.dataloader import GraphormerBatch, GraphormerDataLoader
 from graphormer.model_analysis import (
@@ -83,9 +83,12 @@ class Trainer:
             .build()
             .to(hparam_config.torch_device)
         )
-        pos_weight = calculate_pos_weight(train_loader)
         loss_weights = hparam_config.loss_weights
-        loss = loss_config.with_pos_weight(pos_weight).with_weights(loss_weights).build()
+        if LossFunction.MSE not in hparam_config.loss_function:
+            pos_weight = calculate_pos_weight(train_loader)
+            loss = loss_config.with_pos_weight(pos_weight).with_weights(loss_weights).build()
+        else:
+            loss = loss_config.with_weights(loss_weights).build()
         optimizer = optimizer_config.build(model)
         if scheduler_config.scheduler_type == SchedulerType.ONE_CYCLE:
             scheduler_config = scheduler_config.with_train_batches_per_epoch(len(train_loader))
