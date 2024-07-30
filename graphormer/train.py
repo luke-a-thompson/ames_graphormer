@@ -3,7 +3,12 @@ from typing import List, Optional, Self
 import optuna
 import torch
 from optuna.trial import Trial
-from sklearn.metrics import accuracy_score, balanced_accuracy_score
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    mean_squared_error,
+    mean_absolute_error,
+)
 from tensorboardX import SummaryWriter
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
@@ -202,12 +207,26 @@ class Trainer:
             if self.hparam_config.loss_reduction == LossReductionType.SUM:
                 avg_eval_loss /= float(self.hparam_config.batch_size)
             progress_bar.set_postfix_str(f"Avg Eval Loss: {avg_eval_loss:.4f}")
-            bac = balanced_accuracy_score(all_eval_labels, all_eval_preds)
-            ac = accuracy_score(all_eval_labels, all_eval_preds)
-            bac_adj = balanced_accuracy_score(all_eval_labels, all_eval_preds, adjusted=True)
-            self.writer.add_scalar("eval/acc", ac, epoch)
-            self.writer.add_scalar("eval/bac", bac, epoch)
-            self.writer.add_scalar("eval/bac_adj", bac_adj, epoch)
+            if LossFunction.MSE not in self.hparam_config.loss_function:
+                bac = balanced_accuracy_score(all_eval_labels, all_eval_preds)
+                ac = accuracy_score(all_eval_labels, all_eval_preds)
+                bac_adj = balanced_accuracy_score(all_eval_labels, all_eval_preds, adjusted=True)
+                self.writer.add_scalar("eval/acc", ac, epoch)
+                self.writer.add_scalar("eval/bac", bac, epoch)
+                self.writer.add_scalar("eval/bac_adj", bac_adj, epoch)
+                print(
+                f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
+                    avg_eval_loss:.4f} | Eval BAC: {bac:.4f} | Eval ACC: {ac:.4f}"
+                )
+            else:
+                mae = mean_absolute_error(all_eval_labels, all_eval_preds)
+                mse = mean_squared_error(all_eval_labels, all_eval_preds)
+                self.writer.add_scalar("eval/mae", mae, epoch)
+                self.writer.add_scalar("eval/mse", mse, epoch)
+                print(
+                f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
+                    avg_eval_loss:.4f} | Eval MSE: {mse:.4f} | Eval MAE: {mae:.4f}"
+                )
             self.writer.add_scalar("eval/avg_eval_loss", avg_eval_loss, epoch)
             self.writer.add_figure(
                 # type: ignore
@@ -247,11 +266,6 @@ class Trainer:
                     plot_attention_sigma(self.model),
                     epoch,
                 )
-
-            print(
-                f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
-                    avg_eval_loss:.4f} | Eval BAC: {bac:.4f} | Eval ACC: {ac:.4f}"
-            )
 
             if total_eval_loss < self.hparam_config.best_loss and trial is None:
                 self.hparam_config.best_loss = total_eval_loss
@@ -335,11 +349,15 @@ class Trainer:
         batch_loss: float = loss.item()
         self.writer.add_scalar("eval/batch_loss", batch_loss, eval_batch_num)
 
-        eval_preds = torch.round(torch.sigmoid(output)).tolist()
-        eval_labels = y.cpu().numpy()
-        if sum(eval_labels) > 0:
-            batch_bac = balanced_accuracy_score(eval_labels, eval_preds)
-            self.writer.add_scalar("eval/batch_bac", batch_bac, eval_batch_num)
+        if LossFunction.MSE not in self.hparam_config.loss_function:
+            eval_preds = torch.round(torch.sigmoid(output)).tolist()
+            eval_labels = y.cpu().numpy()
+            if sum(eval_labels) > 0:
+                batch_bac = balanced_accuracy_score(eval_labels, eval_preds)
+                self.writer.add_scalar("eval/batch_bac", batch_bac, eval_batch_num)
+        else:
+            eval_preds = output.cpu().numpy()
+            eval_labels = y.cpu().numpy()
 
         all_eval_preds.extend(eval_preds)
         all_eval_labels.extend(eval_labels)
