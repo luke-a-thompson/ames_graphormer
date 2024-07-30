@@ -1,4 +1,5 @@
-from typing import Any, List, Union, Sequence, Optional, override
+from typing import Any, List, Optional, Sequence, Union, override
+
 import torch
 import torch.nn.utils.rnn as rnn
 from torch_geometric.data import Data
@@ -54,6 +55,7 @@ class GraphormerCollater(Collater):
         edge_attr = data.edge_attr.float()
         node_paths = data.node_paths
         edge_paths = data.edge_paths
+
         degrees = data.degrees
         ptr = data.ptr
 
@@ -82,6 +84,9 @@ class GraphormerCollater(Collater):
             stop_edge_index = (edge_index[0] < idx_range[1]).sum()
 
             edge_attr_subgraphs.append(edge_attr[start_edge_index:stop_edge_index, :])
+            assert idx_range_sq[1] <= len(
+                node_paths
+            ), f"{idx_range_sq[1]}, {len(node_paths)}, {num_nodes}, {ptr}, {data.x}"
             node_paths_subgraphs.append(
                 node_paths[idx_range_sq[0] : idx_range_sq[1]].reshape(num_nodes, num_nodes, path_length)
             )

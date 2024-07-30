@@ -38,8 +38,4 @@ def shortest_path_distance(
     # Node -> VNODE
     edge_paths_tensor[1:, 0, :1] = extra_edge_idxs
 
-    # (num_nodes ** 2, max_path_len)
-    node_paths_tensor_flat = node_paths_tensor.flatten(0, 1)
-    edge_paths_tensor_flat = edge_paths_tensor.flatten(0, 1)
-
-    return node_paths_tensor_flat, edge_paths_tensor_flat, extra_edge_idxs
+    return node_paths_tensor, edge_paths_tensor, extra_edge_idxs
