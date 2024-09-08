@@ -33,17 +33,14 @@ def train(**kwargs):
 @tuning_hyperparameters
 def tune(**kwargs):
     hparam_config = TuningHyperparameterConfig(**kwargs)
-    data_config = hparam_config.data_config()
-    train_loader, test_loader = data_config.build()
     study = optuna.create_study(
         direction="minimize",
         study_name=hparam_config.study_name,
         storage="sqlite:///db.sqlite3",
         sampler=TPESampler(),
-        pruner=HyperbandPruner(),
+        pruner=HyperbandPruner(max_resource=100),
         load_if_exists=True,
     )
-
     starting_points = []
 
     match hparam_config.optimizer_type:
@@ -158,7 +155,7 @@ def tune(**kwargs):
 
     def objective(trial: Trial) -> float:
         trial_hparams = hparam_config.create_hyperparameters(trial)
-        trainer = Trainer.build(trial_hparams, train_loader, test_loader)
+        trainer = Trainer.build(trial_hparams)
         return trainer.fit()
 
     study.optimize(objective, n_trials=hparam_config.n_trials)

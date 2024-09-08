@@ -7,6 +7,7 @@ from scipy.stats import friedmanchisquare
 from scikit_posthocs import posthoc_conover_friedman
 from sklearn.metrics import balanced_accuracy_score, f1_score
 import os
+import warnings
 
 
 # Results dict: Dict[mc_sample, Dict[label, List[preds]]]
@@ -18,12 +19,31 @@ def save_results(results_dict: Dict[int, Dict[str, List[float] | int]], model_na
     os.makedirs(model_results_path, exist_ok=True)
 
     results_df = pd.DataFrame(results_dict)
+    # assert False, results_df
 
     results_df.to_pickle(f"{model_results_path}/{result_type}_preds.pkl")
     plot_calibration_curve(results_df, model_name, model_results_path, mc_samples)
     save_mc_bacs(results_df, model_name, global_results_path)
 
-    print(f"Predictions, calibration curve, BACs, F1s, saved to {model_results_path}")
+    ece = calculate_ece(results_df.T['label'], results_df.T['preds'].apply(lambda x: float(x[0])))
+    print(f"Predictions, calibration curve, BACs, F1s, saved to {model_results_path}\n ECE: {ece:.3f}")
+
+
+def calculate_ece(y_true, y_prob, n_bins=10):
+    bin_edges = np.linspace(0, 1, n_bins + 1)
+    bin_indices = np.digitize(y_prob, bin_edges, right=True)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    ece = 0.0
+    for i in range(1, n_bins + 1):
+        bin_mask = bin_indices == i
+        if np.any(bin_mask):
+            bin_accuracy = np.mean(y_true[bin_mask])
+            bin_confidence = np.mean(y_prob[bin_mask])
+            bin_size = np.sum(bin_mask)
+            ece += (bin_size / len(y_true)) * np.abs(bin_accuracy - bin_confidence)
+
+    return ece
 
 
 def plot_calibration_curve(df: pd.DataFrame, model_name: str, save_path: str, mc_dropout: bool = True) -> None:
@@ -42,7 +62,7 @@ def plot_calibration_curve(df: pd.DataFrame, model_name: str, save_path: str, mc
 
     chart_type = "CI Calibration" if mc_dropout else "Calibration Curve"
 
-    df = df.transpose()
+    df = df.T
     df.label = df.label.astype(int)
 
     df = get_cis(df)
@@ -153,8 +173,9 @@ def update_or_create_csv(file_path: str, new_df: pd.DataFrame, model_name: str) 
     if os.path.exists(file_path):
         existing_df = pd.read_csv(file_path, index_col=0)
         if len(existing_df.columns) != len(new_df.columns):
-            raise ValueError(
-                f"Existing scores in {file_path} have {len(existing_df.columns)} MC_sample columns, while new scores from {model_name} have {len(new_df.columns)} MC_sample columns."
+            warnings.warn(
+                f"Existing scores in {file_path} have {len(existing_df.columns)} MC_sample columns, while new scores from {model_name} have {len(new_df.columns)} MC_sample columns.",
+                UserWarning,
             )
         print(f"Scores of {model_name} appended to {file_path}")
         updated_df = pd.concat([existing_df, new_df])

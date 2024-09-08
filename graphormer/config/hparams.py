@@ -157,7 +157,7 @@ class HyperparameterConfig:
         weight_decay: Optional[float] = None,
         eps: Optional[float] = None,
         clip_grad_norm: float = 5.0,
-        loss_function: LossFunction | tuple[LossFunction, ...]= None,
+        loss_function: LossFunction | tuple[LossFunction, ...] = None,
         loss_reduction: Optional[LossReductionType] = None,
         loss_weights: Optional[Tuple[float, ...]] = None,
         # Scheduler Parameters
@@ -289,10 +289,10 @@ class HyperparameterConfig:
         self.loss_state_dict = None
 
     def data_config(self) -> DataConfig:
-        if self.dataset is None:
-            raise AttributeError("dataset not defined for DataConfig")
-        if self.dataset_regime is None:
-            raise AttributeError("dataset not defined for DataConfig")
+        if self.dataset is None or self.dataset not in DatasetType:
+            raise AttributeError(f"dataset '{self.dataset}' not defined for DataConfig")
+        if self.dataset_regime is None or self.dataset_regime not in DatasetRegime:
+            raise AttributeError(f"dataset_regime '{self.dataset_regime}' not defined for DataConfig")
         if self.batch_size is None:
             raise AttributeError("batch_size not defined for DataConfig")
         if self.datadir is None:

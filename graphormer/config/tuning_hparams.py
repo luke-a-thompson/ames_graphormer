@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import click
 from random import random
 from graphormer.config.data import DataConfig
@@ -6,11 +6,13 @@ from graphormer.config.hparams import HyperparameterConfig, hyperparameters
 from graphormer.config.options import (
     AttentionType,
     DatasetType,
+    DatasetRegime,
     LossReductionType,
     OptimizerType,
     ResidualType,
     SchedulerType,
     NormType,
+    LossFunction,
 )
 from optuna.trial import Trial
 
@@ -26,7 +28,7 @@ tuning_hyperparameters = create_composite_decorator(
         expose_value=False,
         help="Read option values from the specified config file",
         callback=configure,
-        default="default_tuning_hparams.toml",
+        default="hparams/default_tuning_hparams.toml",
     ),
     click.option("--logdir", default="optuna_runs"),
     click.option("--max_in_degree", default=5),
@@ -42,6 +44,10 @@ tuning_hyperparameters = create_composite_decorator(
     click.option("--max_eps", default=1e-7),
     click.option("--min_momentum", default=0.0),
     click.option("--max_momentum", default=1.0),
+    click.option("--min_max_momentum", default=0.9),
+    click.option("--max_max_momentum", default=0.99),
+    click.option("--min_base_momentum", default=0.1),
+    click.option("--max_base_momentum", default=1.0),
     click.option("--min_dampening", default=0.0),
     click.option("--max_dampening", default=1.0),
     click.option("--min_clip_grad_norm", default=1.0),
@@ -64,6 +70,12 @@ tuning_hyperparameters = create_composite_decorator(
     click.option("--max_lr_reset", default=7),
     click.option("--min_lr_factor", default=0.1),
     click.option("--max_lr_factor", default=0.9),
+    click.option("--min_pct_start", default=0.1),
+    click.option("--max_pct_start", default=0.9),
+    click.option("--min_div_factor", default=1.0),
+    click.option("--max_div_factor", default=1e2),
+    click.option("--min_final_div_factor", default=1.0),
+    click.option("--max_final_div_factor", default=1e6),
     click.option("--study_name", default=None),
     click.option("--min_dropout", default=0.0),
     click.option("--max_dropout", default=0.5),
@@ -84,6 +96,7 @@ class TuningHyperparameterConfig:
         # Data Parameters
         datadir: Optional[str] = None,
         dataset: Optional[DatasetType] = None,
+        dataset_regime: Optional[DatasetRegime] = None,
         node_feature_dim: Optional[int] = None,
         edge_feature_dim: Optional[int] = None,
         max_path_distance: Optional[int] = None,
@@ -113,58 +126,84 @@ class TuningHyperparameterConfig:
         optimizer_type: Optional[OptimizerType] = None,
         loss_reduction_type: Optional[LossReductionType] = None,
         lr: Optional[float] = None,
+        b1: Optional[float] = None,
+        b2: Optional[float] = None,
         max_b1: Optional[float] = None,
         min_b1: Optional[float] = None,
         max_b2: Optional[float] = None,
         min_b2: Optional[float] = None,
+        weight_decay: Optional[float] = None,
         max_weight_decay: Optional[float] = None,
         min_weight_decay: Optional[float] = None,
+        eps: Optional[float] = None,
         max_eps: Optional[float] = None,
         min_eps: Optional[float] = None,
+        clip_grad_norm: float = 3.0,
         max_clip_grad_norm: float = 5.0,
         min_clip_grad_norm: float = 1.0,
+        momentum: Optional[float] = None,
         max_momentum: Optional[float] = None,
         min_momentum: Optional[float] = None,
+        dampening: Optional[float] = None,
         max_dampening: Optional[float] = None,
         min_dampening: Optional[float] = None,
+        nesterov: Optional[float] = None,
+        loss_function: Optional[LossFunction | tuple[LossFunction, ...]] = None,
+        loss_weights: Optional[Tuple[float, ...]] = None,
         # Scheduler Parameters
         scheduler_type: Optional[SchedulerType] = None,
+        lr_power: Optional[float] = None,
+        lr_min: Optional[float] = None,
+        lr_max: Optional[float] = None,
         max_lr_power: Optional[float] = None,
         min_lr_power: Optional[float] = None,
+        lr_patience: Optional[int] = None,
         max_lr_patience: Optional[int] = None,
         min_lr_patience: Optional[int] = None,
+        lr_cooldown: Optional[int] = None,
         max_lr_cooldown: Optional[int] = None,
         min_lr_cooldown: Optional[int] = None,
         max_lr_min: Optional[float] = None,
         min_lr_min: Optional[float] = None,
         max_lr_max: Optional[float] = None,
         min_lr_max: Optional[float] = None,
+        lr_warmup: Optional[int] = None,
+        lr_smooth: Optional[bool] = None,
         max_lr_warmup: Optional[int] = None,
         min_lr_warmup: Optional[int] = None,
+        lr_window: Optional[int] = None,
         max_lr_window: Optional[int] = None,
         min_lr_window: Optional[int] = None,
+        lr_reset: Optional[float] = None,
         max_lr_reset: Optional[int] = None,
         min_lr_reset: Optional[int] = None,
+        lr_factor: Optional[float] = None,
         max_lr_factor: Optional[float] = None,
         min_lr_factor: Optional[float] = None,
+        pct_start: Optional[float] = None,
         min_pct_start: Optional[float] = None,
         max_pct_start: Optional[float] = None,
+        div_factor: Optional[float] = None,
         min_div_factor: Optional[float] = None,
         max_div_factor: Optional[float] = None,
+        final_div_factor: Optional[float] = None,
         min_final_div_factor: Optional[float] = None,
         max_final_div_factor: Optional[float] = None,
         cycle_momentum: Optional[bool] = None,
         three_phase: Optional[bool] = None,
         min_max_momentum: Optional[float] = None,
         max_max_momentum: Optional[float] = None,
+        base_momentum: Optional[float | List[float]] = None,
         min_base_momentum: Optional[float] = None,
         max_base_momentum: Optional[float] = None,
         anneal_strategy: Optional[str] = None,
+        last_effective_batch_num: Optional[int] = None,
         # Logging Parameters
         logdir: Optional[str] = None,
         # Training Parameters
-        epochs: int = 10,
+        epochs: int = 40,
         accumulation_steps: Optional[int] = None,
+        **kwargs,
     ):
         self.n_trials = n_trials
         self.study_name = study_name
@@ -173,6 +212,7 @@ class TuningHyperparameterConfig:
         self.checkpoint_dir = checkpoint_dir
         self.datadir = datadir
         self.dataset = dataset
+        self.dataset_regime = dataset_regime
         self.node_feature_dim = node_feature_dim
         self.edge_feature_dim = edge_feature_dim
         self.max_path_distance = max_path_distance
@@ -204,54 +244,80 @@ class TuningHyperparameterConfig:
         self.optimizer_type = optimizer_type
         self.loss_reduction_type = loss_reduction_type
         self.lr = lr
+        self.b1 = b1
+        self.b2 = b2
         self.max_b1 = max_b1
         self.min_b1 = min_b1
         self.max_b2 = max_b2
         self.min_b2 = min_b2
+        self.eps = eps
+        self.weight_decay = weight_decay
         self.max_weight_decay = max_weight_decay
         self.min_weight_decay = min_weight_decay
         self.max_eps = max_eps
         self.min_eps = min_eps
+        self.clip_grad_norm = clip_grad_norm
         self.max_clip_grad_norm = max_clip_grad_norm
         self.min_clip_grad_norm = min_clip_grad_norm
+        self.momentum = momentum
         self.max_momentum = max_momentum
         self.min_momentum = min_momentum
+        self.dampening = dampening
         self.max_dampening = max_dampening
         self.min_dampening = min_dampening
+        self.nesterov = nesterov
+
+        self.loss_function = loss_function
+        self.loss_weights = loss_weights
 
         # Scheduler Parameters
         self.scheduler_type = scheduler_type
+        self.lr_power = lr_power
         self.max_lr_power = max_lr_power
         self.min_lr_power = min_lr_power
+        self.lr_patience = lr_patience
         self.max_lr_patience = max_lr_patience
         self.min_lr_patience = min_lr_patience
+        self.lr_cooldown = lr_cooldown
         self.max_lr_cooldown = max_lr_cooldown
         self.min_lr_cooldown = min_lr_cooldown
+        self.lr_min = lr_min
         self.max_lr_min = max_lr_min
         self.min_lr_min = min_lr_min
+        self.lr_max = lr_max
         self.max_lr_max = max_lr_max
         self.min_lr_max = min_lr_max
+        self.lr_warmup = lr_warmup
         self.max_lr_warmup = max_lr_warmup
         self.min_lr_warmup = min_lr_warmup
+        self.lr_smooth = lr_smooth
+        self.lr_window = lr_window
         self.max_lr_window = max_lr_window
         self.min_lr_window = min_lr_window
+        self.lr_reset = lr_reset
         self.max_lr_reset = max_lr_reset
         self.min_lr_reset = min_lr_reset
+        self.lr_factor = lr_factor
         self.max_lr_factor = max_lr_factor
         self.min_lr_factor = min_lr_factor
+        self.pct_start = pct_start
         self.min_pct_start = min_pct_start
         self.max_pct_start = max_pct_start
+        self.div_factor = div_factor
         self.min_div_factor = min_div_factor
         self.max_div_factor = max_div_factor
+        self.final_div_factor = final_div_factor
         self.min_final_div_factor = min_final_div_factor
         self.max_final_div_factor = max_final_div_factor
         self.cycle_momentum = cycle_momentum
         self.three_phase = three_phase
         self.min_max_momentum = min_max_momentum
         self.max_max_momentum = max_max_momentum
+        self.base_momentum = base_momentum
         self.min_base_momentum = min_base_momentum
         self.max_base_momentum = max_base_momentum
         self.anneal_strategy = anneal_strategy
+        self.last_effective_batch_num = last_effective_batch_num
 
         # Logging Parameters
         self.logdir = logdir
@@ -359,112 +425,94 @@ class TuningHyperparameterConfig:
             raise AttributeError("max_max_momentum not defined for TuningHyperparameterConfig")
 
         if self.residual_type is None:
-            residual_type = ResidualType(
+            self.residual_type = ResidualType(
                 trial.suggest_categorical("residual_type", [ResidualType.PRENORM, ResidualType.REZERO])
             )
-        else:
-            residual_type = self.residual_type
         if self.optimizer_type is None:
-            optimizer_type = OptimizerType(
+            self.optimizer_type = OptimizerType(
                 trial.suggest_categorical("optimizer_type", [OptimizerType.SGD, OptimizerType.ADAMW])
             )
-        else:
-            optimizer_type = self.optimizer_type
         if self.scheduler_type is None:
-            scheduler_type = SchedulerType(
+            self.scheduler_type = SchedulerType(
                 trial.suggest_categorical(
                     "scheduler_type", [SchedulerType.GREEDY, SchedulerType.POLYNOMIAL, SchedulerType.PLATEAU]
                 )
             )
-        else:
-            scheduler_type = self.scheduler_type
         if self.loss_reduction_type is None:
             loss_reduction_type = LossReductionType(
                 trial.suggest_categorical("loss_reduction", [LossReductionType.MEAN, LossReductionType.SUM])
             )
-        else:
-            loss_reduction_type = self.loss_reduction_type
 
-        norm_type = self.norm_type
-        if norm_type is None:
-            norm_type = NormType(
+        if self.norm_type is None:
+            self.norm_type = NormType(
                 trial.suggest_categorical("norm_type", [NormType.LAYER, NormType.MAX, NormType.RMS, NormType.CRMS])
             )
 
-        nesterov = None
-        momentum = None
-        dampening = None
-        b1 = None
-        b2 = None
-        eps = None
-
-        match optimizer_type:
+        match self.optimizer_type:
             case OptimizerType.SGD:
-                nesterov = trial.suggest_categorical("nesterov", [True, False])
-                momentum = trial.suggest_float("momentum", self.min_momentum, self.max_momentum)
-                dampening = 0.0
-                if not nesterov:
-                    dampening = trial.suggest_float("dampening", self.min_dampening, self.max_dampening)
+                if self.momentum is None:
+                    self.momentum = trial.suggest_float("momentum", self.min_momentum, self.max_momentum)
+
+                if self.dampening is None:
+                    self.dampening = trial.suggest_float("dampening", self.min_dampening, self.max_dampening)
+
+                if self.nesterov is None:
+                    self.nesterov = trial.suggest_categorical("nesterov", [True, False])
             case OptimizerType.ADAMW:
-                b1 = trial.suggest_float("b1", self.min_b1, self.max_b1)
-                b2 = trial.suggest_float("b2", self.min_b2, self.max_b2)
-                eps = trial.suggest_float("eps", self.min_eps, self.max_eps)
+                if self.b1 is None:
+                    self.b1 = trial.suggest_float("b1", self.min_b1, self.max_b1)
+                if self.b2 is None:
+                    self.b2 = trial.suggest_float("b2", self.min_b2, self.max_b2)
+                if self.eps is None:
+                    self.eps = trial.suggest_float("eps", self.min_eps, self.max_eps)
 
-        lr_factor = None
-        lr_power = None
-        lr_window = None
-        lr_patience = None
-        lr_warmup = None
-        lr_cooldown = None
-        lr_reset = None
-        lr_smooth = None
-        lr_min = None
-        lr_max = None
-        pct_start = None
-        div_factor = None
-        final_div_factor = None
-        max_momentum = None
-        base_momentum = None
-        cycle_momentum = self.cycle_momentum
-        three_phase = self.three_phase
-        anneal_strategy = self.anneal_strategy
-
-        match scheduler_type:
+        match self.scheduler_type:
             case SchedulerType.GREEDY:
-                lr_smooth = trial.suggest_categorical("lr_smooth", [True, False])
-                lr_warmup = trial.suggest_int("lr_warmup", self.min_lr_warmup, self.max_lr_warmup)
-                lr_cooldown = trial.suggest_int("lr_cooldown", self.min_lr_cooldown, self.max_lr_cooldown)
-                lr_window = trial.suggest_int("lr_window", self.min_lr_window, self.max_lr_window)
-                lr_patience = trial.suggest_int("lr_patience", self.min_lr_patience, self.max_lr_patience)
-                lr_reset = trial.suggest_int("lr_reset", self.min_lr_reset, self.max_lr_reset)
-                lr_max = trial.suggest_float("lr_max", self.min_lr_max, self.max_lr_max)
-                lr_min = trial.suggest_float("lr_min", self.min_lr_min, self.max_lr_min)
-                lr_factor = trial.suggest_float("lr_factor", self.min_lr_factor, self.max_lr_factor)
+                self.lr_smooth = trial.suggest_categorical("lr_smooth", [True, False])
+                self.lr_warmup = trial.suggest_int("lr_warmup", self.min_lr_warmup, self.max_lr_warmup)
+                self.lr_cooldown = trial.suggest_int("lr_cooldown", self.min_lr_cooldown, self.max_lr_cooldown)
+                self.lr_window = trial.suggest_int("lr_window", self.min_lr_window, self.max_lr_window)
+                self.lr_patience = trial.suggest_int("lr_patience", self.min_lr_patience, self.max_lr_patience)
+                self.lr_reset = trial.suggest_int("lr_reset", self.min_lr_reset, self.max_lr_reset)
+                self.lr_max = trial.suggest_float("lr_max", self.min_lr_max, self.max_lr_max)
+                self.lr_min = trial.suggest_float("lr_min", self.min_lr_min, self.max_lr_min)
+                self.lr_factor = trial.suggest_float("lr_factor", self.min_lr_factor, self.max_lr_factor)
             case SchedulerType.PLATEAU:
-                lr_min = trial.suggest_float("lr_min", self.min_lr_min, self.max_lr_min)
-                lr_factor = trial.suggest_float("lr_factor", self.min_lr_factor, self.max_lr_factor)
-                lr_patience = trial.suggest_int("lr_patience", self.min_lr_patience, self.max_lr_patience)
-                lr_cooldown = trial.suggest_int("lr_cooldown", self.min_lr_cooldown, self.max_lr_cooldown)
+                self.lr_min = trial.suggest_float("lr_min", self.min_lr_min, self.max_lr_min)
+                self.lr_factor = trial.suggest_float("lr_factor", self.min_lr_factor, self.max_lr_factor)
+                self.lr_patience = trial.suggest_int("lr_patience", self.min_lr_patience, self.max_lr_patience)
+                self.lr_cooldown = trial.suggest_int("lr_cooldown", self.min_lr_cooldown, self.max_lr_cooldown)
             case SchedulerType.POLYNOMIAL:
-                lr_power = trial.suggest_float("lr_power", self.min_lr_power, self.max_lr_power)
+                self.lr_power = trial.suggest_float("lr_power", self.min_lr_power, self.max_lr_power)
             case SchedulerType.ONE_CYCLE:
-                pct_start = trial.suggest_float("pct_start", self.min_pct_start, self.max_pct_start)
-                div_factor = trial.suggest_float("div_factor", self.min_div_factor, self.max_div_factor)
-                final_div_factor = trial.suggest_float(
+                self.pct_start = trial.suggest_float("pct_start", self.min_pct_start, self.max_pct_start)
+                self.div_factor = trial.suggest_float("div_factor", self.min_div_factor, self.max_div_factor)
+                self.final_div_factor = trial.suggest_float(
                     "final_div_factor", self.min_final_div_factor, self.max_final_div_factor
                 )
-                if cycle_momentum is None:
-                    cycle_momentum = trial.suggest_categorical("cycle_momentum", [True, False])
-                if three_phase is None:
-                    three_phase = trial.suggest_categorical("three_phase", [True, False])
-                max_momentum = trial.suggest_float("max_momentum", self.min_max_momentum, self.max_max_momentum)
-                base_momentum = trial.suggest_float("base_momentum", self.min_base_momentum, self.max_base_momentum)
-                if anneal_strategy is None:
-                    anneal_strategy = trial.suggest_categorical("anneal_strategy", ["cos", "linear"])
+                if self.cycle_momentum is None:
+                    self.cycle_momentum = trial.suggest_categorical("cycle_momentum", [True, False])
+                if self.three_phase is None:
+                    self.three_phase = trial.suggest_categorical("three_phase", [True, False])
+                self.max_momentum = trial.suggest_float("max_momentum", self.min_max_momentum, self.max_max_momentum)
+                self.base_momentum = trial.suggest_float(
+                    "base_momentum", self.min_base_momentum, self.max_base_momentum
+                )
+                if self.anneal_strategy is None:
+                    self.anneal_strategy = trial.suggest_categorical("anneal_strategy", ["cos", "linear"])
+
+        if self.weight_decay is None:
+            self.weight_decay = trial.suggest_float("weight_decay", self.min_weight_decay, self.max_weight_decay)
+
+        if self.clip_grad_norm is None:
+            self.clip_grad_norm = trial.suggest_float(
+                "clip_grad_norm", self.min_clip_grad_norm, self.max_clip_grad_norm
+            )
 
         return HyperparameterConfig(
             datadir=self.datadir,
             dataset=self.dataset,
+            dataset_regime=self.dataset_regime,
             random_state=self.random_state,
             torch_device=self.torch_device,
             node_feature_dim=self.node_feature_dim,
@@ -485,47 +533,50 @@ class TuningHyperparameterConfig:
             output_dim=self.output_dim,
             dropout=trial.suggest_float("dropout", self.min_dropout, self.max_dropout),
             batch_size=self.batch_size,
-            norm_type=norm_type,
+            norm_type=self.norm_type,
             attention_type=self.attention_type,
             heads_by_layer=self.heads_by_layer,
             n_global_heads=self.n_global_heads,
             n_local_heads=self.n_local_heads,
             global_heads_by_layer=self.global_heads_by_layer,
             local_heads_by_layer=self.local_heads_by_layer,
-            residual_type=residual_type,
+            residual_type=self.residual_type,
             # Optimizer Parameters
-            optimizer_type=optimizer_type,
+            optimizer_type=self.optimizer_type,
             lr=self.lr,
-            b1=b1,
-            b2=b2,
-            weight_decay=trial.suggest_float("weight_decay", self.min_weight_decay, self.max_weight_decay),
-            eps=eps,
-            clip_grad_norm=trial.suggest_float("clip_grad_norm", self.min_clip_grad_norm, self.max_clip_grad_norm),
-            momentum=momentum,
-            dampening=dampening,
-            nesterov=nesterov,
+            b1=self.b1,
+            b2=self.b2,
+            weight_decay=self.weight_decay,
+            eps=self.eps,
+            clip_grad_norm=self.clip_grad_norm,
+            momentum=self.momentum,
+            dampening=self.dampening,
+            nesterov=self.nesterov,
+            loss_function=self.loss_function,
+            loss_weights=self.loss_weights,
             # Scheduler Parameters
-            scheduler_type=scheduler_type,
-            lr_power=lr_power,
-            lr_patience=lr_patience,
-            lr_cooldown=lr_cooldown,
-            lr_min=lr_min,
-            lr_max=lr_max,
-            lr_warmup=lr_warmup,
-            lr_window=lr_window,
-            lr_reset=lr_reset,
-            lr_factor=lr_factor,
-            lr_smooth=lr_smooth,
-            pct_start=pct_start,
-            div_factor=div_factor,
-            final_div_factor=final_div_factor,
-            cycle_momentum=cycle_momentum,
-            three_phase=three_phase,
-            max_momentum=max_momentum,
-            base_momentum=base_momentum,
-            anneal_strategy=anneal_strategy,
+            scheduler_type=self.scheduler_type,
+            last_effective_batch_num=self.last_effective_batch_num,
+            lr_power=self.lr_power,
+            lr_patience=self.lr_patience,
+            lr_cooldown=self.lr_cooldown,
+            lr_min=self.lr_min,
+            lr_max=self.lr_max,
+            lr_warmup=self.lr_warmup,
+            lr_window=self.lr_window,
+            lr_reset=self.lr_reset,
+            lr_factor=self.lr_factor,
+            lr_smooth=self.lr_smooth,
+            pct_start=self.pct_start,
+            div_factor=self.div_factor,
+            final_div_factor=self.final_div_factor,
+            cycle_momentum=self.cycle_momentum,
+            three_phase=self.three_phase,
+            max_momentum=self.max_momentum,
+            base_momentum=self.base_momentum,
+            anneal_strategy=self.anneal_strategy,
             # Training Parameters
-            epochs=self.epochs,
+            epochs=40,
             accumulation_steps=self.accumulation_steps,
             loss_reduction=loss_reduction_type,
             checkpoint_dir=self.checkpoint_dir,
@@ -536,6 +587,8 @@ class TuningHyperparameterConfig:
     def data_config(self) -> DataConfig:
         if self.dataset is None:
             raise AttributeError("dataset not defined for DataConfig")
+        if self.dataset_regime is None:
+            raise AttributeError("dataset_regime not defined for DataConfig")
         if self.batch_size is None:
             raise AttributeError("batch_size not defined for DataConfig")
         if self.datadir is None:
@@ -543,7 +596,7 @@ class TuningHyperparameterConfig:
         if self.max_path_distance is None:
             raise AttributeError("max_path_distance not defined for DataConfig")
 
-        config = DataConfig(self.dataset, self.batch_size, self.datadir, self.max_path_distance)
+        config = DataConfig(self.dataset, self.dataset_regime, self.batch_size, self.datadir, self.max_path_distance)
 
         if self.test_size is not None:
             config = config.with_test_size(self.test_size)

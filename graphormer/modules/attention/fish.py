@@ -63,7 +63,7 @@ class GraphormerFishAttention(nn.Module):
         assert data.normalized_input is not None
         assert data.attention_prior is not None
         x = data.normalized_input
-        prior = data.attention_prior
+        prior = data.attention_prior.permute(0, 2, 3, 1).contiguous()  # Permute to (batch_size, max_subgraph_size, max_subgraph_size, num_global_heads)
         batch_size = x.shape[0]
         max_subgraph_size = x.shape[1]
 

@@ -29,6 +29,7 @@ from graphormer.model_analysis import (
 )
 from graphormer.modules.model import Graphormer
 from graphormer.schedulers import GreedyLR
+import numpy as np
 
 
 class Trainer:
@@ -220,12 +221,12 @@ class Trainer:
                 )
             else:
                 mae = mean_absolute_error(all_eval_labels, all_eval_preds)
-                mse = mean_squared_error(all_eval_labels, all_eval_preds)
+                rmse = np.sqrt(mean_squared_error(all_eval_labels, all_eval_preds))
                 self.writer.add_scalar("eval/mae", mae, epoch)
-                self.writer.add_scalar("eval/mse", mse, epoch)
+                self.writer.add_scalar("eval/rmse", rmse, epoch)
                 print(
                 f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
-                    avg_eval_loss:.4f} | Eval MSE: {mse:.4f} | Eval MAE: {mae:.4f}"
+                    avg_eval_loss:.4f} | Eval RMSE: {rmse:.4f} | Eval MAE: {mae:.4f}"
                 )
             self.writer.add_scalar("eval/avg_eval_loss", avg_eval_loss, epoch)
             self.writer.add_figure(

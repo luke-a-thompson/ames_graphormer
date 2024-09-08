@@ -6,7 +6,7 @@ torch_device = "cuda"
 
 # Data settings
 dataset = "honma"
-batch_size = 128
+batch_size = 32
 accumulation_steps = 8
 test_size = 0.8
 
@@ -49,4 +49,4 @@ three_phase = false
 loss_reduction = "mean"
 # Training settings
 epochs = 1000
-checkpt_save_interval = 1 
+checkpt_save_interval = 1
