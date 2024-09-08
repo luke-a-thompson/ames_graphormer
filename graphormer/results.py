@@ -25,14 +25,13 @@ def save_results(results_dict: Dict[int, Dict[str, List[float] | int]], model_na
     plot_calibration_curve(results_df, model_name, model_results_path, mc_samples)
     save_mc_bacs(results_df, model_name, global_results_path)
 
-    ece = calculate_ece(results_df.T['label'], results_df.T['preds'].apply(lambda x: float(x[0])))
+    ece = calculate_ece(results_df.T["label"], results_df.T["preds"].apply(lambda x: float(x[0])))
     print(f"Predictions, calibration curve, BACs, F1s, saved to {model_results_path}\n ECE: {ece:.3f}")
 
 
 def calculate_ece(y_true, y_prob, n_bins=10):
     bin_edges = np.linspace(0, 1, n_bins + 1)
     bin_indices = np.digitize(y_prob, bin_edges, right=True)
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
     ece = 0.0
     for i in range(1, n_bins + 1):

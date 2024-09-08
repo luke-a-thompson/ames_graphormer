@@ -46,7 +46,6 @@ class DataConfig:
         return self
 
     def build(self) -> Tuple[GraphormerDataLoader, GraphormerDataLoader] | GraphormerDataLoader:
-
         dataloader_optimization_params = {
             "pin_memory": True,
             "num_workers": self.num_workers,

@@ -3,6 +3,7 @@ from typing import Optional
 from graphormer.config.hparams import HyperparameterConfig
 from torch_geometric.loader import DataLoader
 from graphormer.config.data import DataConfig
+from graphormer.config.options import DatasetRegime
 from graphormer.modules.model import Graphormer
 from graphormer.config.utils import model_init_print
 from tqdm import tqdm
@@ -22,7 +23,8 @@ def inference_model(
     mc_dropout = mc_samples is not None
     mc_dropout_rate = 0.1
 
-    inference_loader = data_config.build()
+    data_config.dataset_regime = DatasetRegime.TEST
+    inference_loader = data_config.build()  # type: ignore
 
     assert hparam_config.batch_size is not None
     assert data_config.num_node_features is not None
@@ -45,7 +47,7 @@ def inference_model(
     if mc_dropout:
         model.enable_dropout(mc_dropout_rate)
         for mc_sample in tqdm(range(mc_samples), desc="MC Dropout Inference", unit="mc_sample"):
-            for batch_idx, batch in enumerate(inference_loader):
+            for batch_idx, batch in enumerate(inference_loader):  # type: ignore
                 sample_idx: int = batch_idx * hparam_config.batch_size
 
                 batch.to(device)
@@ -66,7 +68,7 @@ def inference_model(
 
         return results
 
-    for batch_idx, batch in enumerate(inference_loader):
+    for batch_idx, batch in enumerate(inference_loader):  # type: ignore
         sample_idx: int = batch_idx * hparam_config.batch_size
         batch.to(device)
         y = batch.y.to(device)

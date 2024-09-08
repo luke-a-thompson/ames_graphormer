@@ -170,7 +170,7 @@ class HyperparameterConfig:
         weight_decay: Optional[float] = None,
         eps: Optional[float] = None,
         clip_grad_norm: float = 5.0,
-        loss_function: LossFunction | tuple[LossFunction, ...] = None,
+        loss_function: Optional[Tuple[LossFunction, ...]] = None,
         loss_reduction: Optional[LossReductionType] = None,
         loss_weights: Optional[Tuple[float, ...]] = None,
         # Scheduler Parameters
