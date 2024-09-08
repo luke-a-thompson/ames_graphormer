@@ -38,7 +38,9 @@ hyperparameters = create_composite_decorator(
     click.option("--datadir", default="data"),
     click.option("--logdir", default="runs"),
     click.option("--dataset", type=click.Choice(DatasetType, case_sensitive=False), default=DatasetType.HONMA),  # type: ignore
-    click.option("--dataset_regime", type=click.Choice(DatasetRegime, case_sensitive=False), default=DatasetRegime.TRAIN),  # type: ignore
+    click.option(
+        "--dataset_regime", type=click.Choice(DatasetRegime, case_sensitive=False), default=DatasetRegime.TRAIN
+    ),  # type: ignore
     click.option("--num_layers", default=3),
     click.option("--hidden_dim", default=128),
     click.option("--edge_embedding_dim", default=128),
@@ -48,7 +50,9 @@ hyperparameters = create_composite_decorator(
     click.option("--max_in_degree", default=5),
     click.option("--max_out_degree", default=5),
     click.option("--max_path_distance", default=5),
-    click.option("--residual_type", type=click.Choice(ResidualType, case_sensitive=False), default=ResidualType.PRENORM),  # type: ignore
+    click.option(
+        "--residual_type", type=click.Choice(ResidualType, case_sensitive=False), default=ResidualType.PRENORM
+    ),  # type: ignore
     click.option("--test_size", default=0.8),
     click.option("--random_state", default=None, type=click.INT),
     click.option("--batch_size", default=16),
@@ -69,7 +73,9 @@ hyperparameters = create_composite_decorator(
         type=click.Choice(SchedulerType, case_sensitive=False),  # type: ignore
         default=SchedulerType.GREEDY,
     ),
-    click.option("--optimizer_type", type=click.Choice(OptimizerType, case_sensitive=False), default=OptimizerType.ADAMW),  # type: ignore
+    click.option(
+        "--optimizer_type", type=click.Choice(OptimizerType, case_sensitive=False), default=OptimizerType.ADAMW
+    ),  # type: ignore
     click.option("--lr_patience", default=4),
     click.option("--lr_cooldown", default=2),
     click.option("--lr_min", default=1e-6),
@@ -91,9 +97,16 @@ hyperparameters = create_composite_decorator(
     click.option("--name", default=None),
     click.option("--checkpt_save_interval", default=5),
     click.option("--accumulation_steps", default=1),
-    click.option("--loss_function", type=click.Choice(LossFunction, case_sensitive=False), multiple=True, default=[LossFunction.BCE_LOGITS]),  # type: ignore
-    click.option("--loss_reduction", type=click.Choice(LossReductionType, case_sensitive=False), default=LossReductionType.MEAN),  # type: ignore
-    click.option("--loss_weights", type=click.FLOAT, multiple=True, default=(1,)), # type: ignore
+    click.option(
+        "--loss_function",
+        type=click.Choice(LossFunction, case_sensitive=False),
+        multiple=True,
+        default=[LossFunction.BCE_LOGITS],
+    ),  # type: ignore
+    click.option(
+        "--loss_reduction", type=click.Choice(LossReductionType, case_sensitive=False), default=LossReductionType.MEAN
+    ),  # type: ignore
+    click.option("--loss_weights", type=click.FLOAT, multiple=True, default=(1,)),  # type: ignore
     click.option("--checkpoint_dir", default="pretrained_models"),
     click.option("--dropout", default=0.05),
     click.option("--norm_type", type=click.Choice(NormType, case_sensitive=False), default=NormType.LAYER),  # type: ignore

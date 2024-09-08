@@ -110,6 +110,6 @@ def calculate_pos_weight(loader: DataLoader):
     num_pos_samples = 0
     print("Calculating positive weight...")
     for sample in tqdm(loader):
-        num_pos_samples += torch.sum(sample.y).item()
-        num_neg_samples += torch.sum(sample.y == 0).item()
+        num_pos_samples += int(torch.sum(sample.y).item())
+        num_neg_samples += int(torch.sum(sample.y == 0).item())
     return torch.tensor([num_neg_samples / num_pos_samples])

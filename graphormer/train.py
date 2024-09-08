@@ -149,7 +149,7 @@ class Trainer:
 
             avg_loss = 0.0
             train_batch_num = epoch * train_batches_per_epoch
-            loss_values = []
+            loss_values: list[float] = []
             for batch_idx, batch in enumerate(train_loader):
                 if (
                     self.hparam_config.tune_size is not None

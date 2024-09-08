@@ -168,8 +168,8 @@ def tune(**kwargs):
 @click.option("--mc_samples", default=None, type=click.INT)
 def inference(mc_samples: Optional[int], **kwargs):
     hparam_config = HyperparameterConfig(**kwargs)
-    hparam_config.load_for_inference()
     hparam_config.dataset_regime = DatasetRegime.TEST
+    hparam_config.load_for_inference()
     print(hparam_config)
     torch.manual_seed(hparam_config.random_state)
     results = inference_model(hparam_config, mc_samples=mc_samples)
@@ -186,11 +186,11 @@ def estimate_noise_scale(**kwargs):
     torch.manual_seed(hparam_config.random_state)
 
 
-# Example: poetry run analyze --models results,results2,results3
-@click.command()
-@click.option("--bac_csv_path", type=click.Path(exists=True), default="results/MC_BACs.csv")
-@click.option("--models", type=click.STRING, callback=lambda ctx, param, value: value.split(","), required=True)
-@click.option("--alpha", default=0.05)
-def analyze(bac_csv_path: Path, models: List[str], alpha: float):
-    assert len(models) >= 3, "The Friedman test requires at least 3 models to compare."
-    friedman_from_bac_csv(bac_csv_path, models, alpha)
+# # Example: poetry run analyze --models results,results2,results3
+# @click.command()
+# @click.option("--bac_csv_path", type=click.Path(exists=True), default="results/MC_BACs.csv")
+# @click.option("--models", type=click.STRING, callback=lambda ctx, param, value: value.split(","), required=True)
+# @click.option("--alpha", default=0.05)
+# def analyze(bac_csv_path: Path, models: List[str], alpha: float):
+#     assert len(models) >= 3, "The Friedman test requires at least 3 models to compare."
+#     friedman_from_bac_csv(bac_csv_path, models, alpha)
