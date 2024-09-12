@@ -46,6 +46,15 @@ class DataConfig:
         return self
 
     def build(self) -> Tuple[GraphormerDataLoader, GraphormerDataLoader] | GraphormerDataLoader:
+        """
+        Builds the dataloaders for the dataset.
+
+        Returns:
+            IF TEST:
+                A single test dataloader.
+            ELSE:
+                A tuple of train and validation dataloaders.
+        """
         dataloader_optimization_params = {
             "pin_memory": True,
             "num_workers": self.num_workers,

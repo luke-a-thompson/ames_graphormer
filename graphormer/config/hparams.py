@@ -71,7 +71,7 @@ hyperparameters = create_composite_decorator(
     click.option(
         "--scheduler_type",
         type=click.Choice(SchedulerType, case_sensitive=False),  # type: ignore
-        default=SchedulerType.GREEDY,
+        default=SchedulerType.FIXED,
     ),
     click.option(
         "--optimizer_type", type=click.Choice(OptimizerType, case_sensitive=False), default=OptimizerType.ADAMW
@@ -109,6 +109,7 @@ hyperparameters = create_composite_decorator(
     click.option("--loss_weights", type=click.FLOAT, multiple=True, default=(1,)),  # type: ignore
     click.option("--checkpoint_dir", default="pretrained_models"),
     click.option("--dropout", default=0.05),
+    click.option("--temperature", default=1.0),
     click.option("--norm_type", type=click.Choice(NormType, case_sensitive=False), default=NormType.LAYER),  # type: ignore
     click.option("--attention_type", type=click.Choice(AttentionType, case_sensitive=False), default=AttentionType.MHA),  # type: ignore
     click.option("--n_global_heads", default=4),
@@ -156,6 +157,7 @@ class HyperparameterConfig:
         max_in_degree: Optional[int] = None,
         max_out_degree: Optional[int] = None,
         dropout: Optional[float] = None,
+        temperature: Optional[float] = None,
         norm_type: Optional[NormType] = None,
         attention_type: Optional[AttentionType] = None,
         residual_type: Optional[ResidualType] = None,
@@ -247,6 +249,7 @@ class HyperparameterConfig:
         self.attention_type = attention_type
         self.residual_type = residual_type
         self.dropout = dropout
+        self.temperature = temperature
         # Optimizer Parameters
         self.optimizer_type = optimizer_type
         self.momentum = momentum
@@ -336,8 +339,6 @@ class HyperparameterConfig:
             config = config.with_edge_embedding_dim(self.edge_embedding_dim)
         if self.ffn_hidden_dim is not None:
             config = config.with_ffn_hidden_dim(self.ffn_hidden_dim)
-        if self.n_heads is not None:
-            config = config.with_num_heads(self.n_heads)
         if self.max_in_degree is not None:
             config = config.with_max_in_degree(self.max_in_degree)
         if self.max_out_degree is not None:
@@ -352,20 +353,26 @@ class HyperparameterConfig:
             config = config.with_max_path_distance(self.max_path_distance)
         if self.dropout is not None:
             config = config.with_dropout(self.dropout)
+        if self.temperature is not None:
+            config = config.with_temperature(self.temperature)
         if self.norm_type is not None:
             config = config.with_norm_type(self.norm_type)
-        if self.heads_by_layer is not None:
-            config = config.with_heads_by_layer(self.heads_by_layer)
         if self.attention_type is not None:
             config = config.with_attention_type(self.attention_type)
-        if self.n_local_heads is not None:
-            config = config.with_n_local_heads(self.n_local_heads)
-        if self.n_global_heads is not None:
-            config = config.with_n_global_heads(self.n_global_heads)
-        if self.global_heads_by_layer is not None:
-            config = config.with_global_heads_by_layer(self.global_heads_by_layer)
-        if self.local_heads_by_layer is not None:
-            config = config.with_local_heads_by_layer(self.local_heads_by_layer)
+        if self.attention_type == AttentionType.MHA or self.attention_type == AttentionType.LINEAR:
+            if self.n_heads is not None:
+                config = config.with_num_heads(self.n_heads)
+            if self.heads_by_layer is not None:
+                config = config.with_heads_by_layer(self.heads_by_layer)
+        if self.attention_type == AttentionType.FISH:
+            if self.n_local_heads is not None:
+                config = config.with_n_local_heads(self.n_local_heads)
+            if self.n_global_heads is not None:
+                config = config.with_n_global_heads(self.n_global_heads)
+            if self.global_heads_by_layer is not None:
+                config = config.with_global_heads_by_layer(self.global_heads_by_layer)
+            if self.local_heads_by_layer is not None:
+                config = config.with_local_heads_by_layer(self.local_heads_by_layer)
         if self.residual_type is not None:
             config = config.with_residual_type(self.residual_type)
 
@@ -512,7 +519,12 @@ class HyperparameterConfig:
         checkpoint_path = f"{self.checkpoint_dir}/{self.name}.pt"
         if not os.path.exists(checkpoint_path):
             return self
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+
+        try:
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+        except Exception as e:
+            print(f"Error loading checkpoint: {e}. Consider setting --name to train a new model.")
+            raise
 
         hparams: Dict[str, Any] = checkpoint["hyperparameters"]
         for key, value in hparams.items():

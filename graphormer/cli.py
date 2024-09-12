@@ -1,6 +1,5 @@
 import click
-from typing import Optional, List
-from pathlib import Path
+from typing import Optional
 from optuna.pruners import HyperbandPruner
 from optuna.samplers import TPESampler
 from optuna.trial import Trial
@@ -14,6 +13,7 @@ from graphormer.config.options import (
 )
 from graphormer.config.tuning_hparams import TuningHyperparameterConfig, tuning_hyperparameters
 from graphormer.inference import inference_model
+from graphormer.optimise_temperature import optimise_temperature
 from graphormer.results import save_results, friedman_from_bac_csv
 from graphormer.train import Trainer
 
@@ -38,7 +38,7 @@ def tune(**kwargs):
         study_name=hparam_config.study_name,
         storage="sqlite:///db.sqlite3",
         sampler=TPESampler(),
-        pruner=HyperbandPruner(max_resource=100),
+        pruner=HyperbandPruner(max_resource=60),
         load_if_exists=True,
     )
     starting_points = []
@@ -166,16 +166,27 @@ def tune(**kwargs):
 @hyperparameters
 @click.option("--checkpoint_dir", default="pretrained_models")
 @click.option("--mc_samples", default=None, type=click.INT)
-def inference(mc_samples: Optional[int], **kwargs):
+@click.option("--mc_dropout_rate", default=0.1, type=click.FLOAT)
+def inference(mc_samples: Optional[int], mc_dropout_rate: Optional[float], **kwargs):
     hparam_config = HyperparameterConfig(**kwargs)
+    hparam_config.load_for_inference()
     hparam_config.dataset_regime = DatasetRegime.TEST
+    hparam_config.temperature = kwargs.get("temperature", hparam_config.temperature)
+    torch.manual_seed(hparam_config.random_state)
+    results = inference_model(hparam_config, mc_samples=mc_samples, mc_dropout_rate=mc_dropout_rate)
+
+    save_results(results, hparam_config.name, mc_samples)
+
+
+@click.command()
+@hyperparameters
+@click.option("--max_iter", default=50, type=click.INT)
+def tune_temperature(max_iter: int, **kwargs):
+    hparam_config = HyperparameterConfig(**kwargs)
+    hparam_config.dataset_regime = DatasetRegime.TRAIN  # We optimise temperature on the validation set
     hparam_config.load_for_inference()
     print(hparam_config)
-    torch.manual_seed(hparam_config.random_state)
-    results = inference_model(hparam_config, mc_samples=mc_samples)
-
-    mc_dropout = mc_samples is not None
-    save_results(results, hparam_config.name, mc_dropout)
+    optimise_temperature(hparam_config, max_iter=max_iter)
 
 
 @click.command()

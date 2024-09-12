@@ -10,6 +10,7 @@ readme = "README.md"
 train = "graphormer.cli:train"
 inference = "graphormer.cli:inference"
 tune = "graphormer.cli:tune"
+tune_temperature = "graphormer.cli:tune_temperature"
 analyze = "graphormer.cli:analyze"
 
 [[tool.poetry.packages]]
@@ -17,7 +18,7 @@ include = "graphormer"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-torch = {version = "^2.3.0+cu121", source="pytorch-gpu-src-cu121"}
+torch = { version = "^2.3.0+cu121", source = "pytorch-gpu-src-cu121" }
 torch-geometric = "^2.5.3"
 click = "^8.1.7"
 scikit-learn = "^1.4.2"
@@ -27,7 +28,7 @@ rich = "^13.7.1"
 torchinfo = "^1.8.0"
 tensorboardX = "^2.6.2.2"
 tensorboard = "^2.16.2"
-gnn_tools = {path = "./gnn-tools", develop=true}
+gnn_tools = { path = "./gnn-tools", develop = true }
 openpyxl = "^3.1.2"
 rdkit = "^2023.9.6"
 optuna = "^3.6.1"

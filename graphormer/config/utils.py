@@ -85,7 +85,7 @@ def model_init_print(
     table = Table(
         show_header=True,
         header_style="green",
-        box=box.MINIMAL,  # Use a minimal box style to save space
+        box=box.MINIMAL,
     )
     table.add_column(
         "Parameter",

@@ -3,7 +3,6 @@ from typing import Optional
 from graphormer.config.hparams import HyperparameterConfig
 from torch_geometric.loader import DataLoader
 from graphormer.config.data import DataConfig
-from graphormer.config.options import DatasetRegime
 from graphormer.modules.model import Graphormer
 from graphormer.config.utils import model_init_print
 from tqdm import tqdm
@@ -15,15 +14,19 @@ def inference_model(
     inference_loader: Optional[DataLoader] = None,
     data_config: Optional[DataConfig] = None,
     mc_samples: Optional[int] = None,
-) -> Dict[int, Dict[str, List[float] | int]]:
+    mc_dropout_rate: Optional[float] = None,
+) -> List[Dict[str, List[int | float]]] | Dict[str, List[int | float]]:
+    """
+    Inference model.
+
+    Returns:
+        List[Dict[str, List[int | float]]] if mc_samples is not None,
+        Dict[str, List[int | float]] if mc_samples is None.
+    """
     if data_config is None:
         data_config = hparam_config.data_config()
     model_config = hparam_config.model_config()
 
-    mc_dropout = mc_samples is not None
-    mc_dropout_rate = 0.1
-
-    data_config.dataset_regime = DatasetRegime.TEST
     inference_loader = data_config.build()  # type: ignore
 
     assert hparam_config.batch_size is not None
@@ -41,49 +44,47 @@ def inference_model(
 
     model_init_print(hparam_config, model, test_dataloader=inference_loader)
 
-    results = {}
-
     model.eval()
-    if mc_dropout:
+    if mc_samples is not None and mc_dropout_rate is not None:
+        mc_results = []
         model.enable_dropout(mc_dropout_rate)
         for mc_sample in tqdm(range(mc_samples), desc="MC Dropout Inference", unit="mc_sample"):
-            for batch_idx, batch in enumerate(inference_loader):  # type: ignore
-                sample_idx: int = batch_idx * hparam_config.batch_size
+            labels = []
+            logits = []
 
+            for batch in inference_loader:  # type: ignore
                 batch.to(device)
                 y = batch.y.to(device)
+
                 with torch.no_grad():
                     output = model(batch)
 
-                batch_eval_preds = torch.sigmoid(output).tolist()
-                batch_eval_labels = y.cpu().numpy()
+                batch_eval_logits: List[float] = torch.sigmoid(output).tolist()
+                batch_eval_labels: List[float] = y.cpu().tolist()
 
-                for pred, label in zip(batch_eval_preds, batch_eval_labels):
-                    if sample_idx not in results:
-                        results[sample_idx] = {"preds": [], "label": label}
+                labels.extend(batch_eval_labels)
+                logits.extend(batch_eval_logits)
 
-                    results[sample_idx]["preds"].append(pred)
+            mc_results.append({"labels": labels, "logits": logits})
 
-                    sample_idx += 1
+        return mc_results
+    else:
+        for batch in inference_loader:  # type: ignore
+            labels = []
+            logits = []
+
+            batch.to(device)
+            y = batch.y.to(device)
+
+            with torch.no_grad():
+                output = model(batch)
+
+            batch_eval_logits: List[float] = torch.sigmoid(output).tolist()
+            batch_eval_labels: List[float] = y.cpu().tolist()
+
+            labels.extend(batch_eval_labels)
+            logits.extend(batch_eval_logits)
+
+        results = {"labels": labels, "logits": logits}
 
         return results
-
-    for batch_idx, batch in enumerate(inference_loader):  # type: ignore
-        sample_idx: int = batch_idx * hparam_config.batch_size
-        batch.to(device)
-        y = batch.y.to(device)
-        with torch.no_grad():
-            output = model(batch)
-
-            batch_eval_preds = torch.sigmoid(output).tolist()
-            batch_eval_labels = y.cpu().numpy()
-
-            for pred, label in zip(batch_eval_preds, batch_eval_labels):
-                if sample_idx not in results:
-                    results[sample_idx] = {"preds": [], "label": label}
-
-                results[sample_idx]["preds"].append(pred)
-
-                sample_idx += 1
-
-    return results

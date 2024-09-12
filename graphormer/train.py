@@ -164,7 +164,12 @@ class Trainer:
                 batch_loss = self.train_step(batch, batch_idx, train_batch_num, loss_values, train_batches_per_epoch)
 
                 total_train_loss += batch_loss
-                interleaved_list = ", ".join([f"{w}x '{f.value}'" for w, f in zip(self.hparam_config.loss_weights, self.hparam_config.loss_function)])
+                interleaved_list = ", ".join(
+                    [
+                        f"{w}x '{f.value}'"
+                        for w, f in zip(self.hparam_config.loss_weights, self.hparam_config.loss_function)
+                    ]
+                )
                 progress_bar.set_postfix_str(f"Avg Loss: {avg_loss:.3f}. Weights: {interleaved_list}")
                 progress_bar.update()  # Increment the progress bar
                 train_batch_num += 1
@@ -216,7 +221,7 @@ class Trainer:
                 self.writer.add_scalar("eval/bac", bac, epoch)
                 self.writer.add_scalar("eval/bac_adj", bac_adj, epoch)
                 print(
-                f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
+                    f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
                     avg_eval_loss:.4f} | Eval BAC: {bac:.4f} | Eval ACC: {ac:.4f}"
                 )
             else:
@@ -225,7 +230,7 @@ class Trainer:
                 self.writer.add_scalar("eval/mae", mae, epoch)
                 self.writer.add_scalar("eval/rmse", rmse, epoch)
                 print(
-                f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
+                    f"Epoch {epoch+1} | Avg Train Loss: {avg_loss:.4f} | Avg Eval Loss: {
                     avg_eval_loss:.4f} | Eval RMSE: {rmse:.4f} | Eval MAE: {mae:.4f}"
                 )
             self.writer.add_scalar("eval/avg_eval_loss", avg_eval_loss, epoch)
@@ -269,7 +274,7 @@ class Trainer:
                 )
 
             if total_eval_loss < self.hparam_config.best_loss and trial is None:
-                self.hparam_config.best_loss = total_eval_loss
+                self.hparam_config.best_loss = avg_eval_loss
                 save_checkpoint(
                     epoch,
                     self.hparam_config,

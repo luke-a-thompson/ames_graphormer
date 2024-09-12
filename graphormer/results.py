@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, TypedDict, NotRequired, Any
 from sklearn.calibration import CalibrationDisplay
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,28 +8,148 @@ from scikit_posthocs import posthoc_conover_friedman
 from sklearn.metrics import balanced_accuracy_score, f1_score
 import os
 import warnings
+import json
 
 
-# Results dict: Dict[mc_sample, Dict[label, List[preds]]]
-def save_results(results_dict: Dict[int, Dict[str, List[float] | int]], model_name: str, mc_samples) -> None:
-    result_type = "mc_dropout" if mc_samples else "regular"
-    global_results_path = "results"
-    model_results_path = f"results/{model_name}_model"
-
-    os.makedirs(model_results_path, exist_ok=True)
-
-    results_df = pd.DataFrame(results_dict)
-    # assert False, results_df
-
-    results_df.to_pickle(f"{model_results_path}/{result_type}_preds.pkl")
-    plot_calibration_curve(results_df, model_name, model_results_path, mc_samples)
-    save_mc_bacs(results_df, model_name, global_results_path)
-
-    ece = calculate_ece(results_df.T["label"], results_df.T["preds"].apply(lambda x: float(x[0])))
-    print(f"Predictions, calibration curve, BACs, F1s, saved to {model_results_path}\n ECE: {ece:.3f}")
+class ResultsDict(TypedDict):
+    labels: List[int]
+    logits: List[float]
+    preds: List[int]
+    bac: float
+    f1: float
+    ece: float
 
 
-def calculate_ece(y_true, y_prob, n_bins=10):
+class MCResultsDict(TypedDict):
+    labels: List[int]
+    median_logits: List[np.floating[Any]]
+
+    upper_ci_bac: np.floating[Any]
+    median_bac: np.floating[Any]
+    lower_ci_bac: np.floating[Any]
+
+    upper_ci_f1: np.floating[Any]
+    median_f1: np.floating[Any]
+    lower_ci_f1: np.floating[Any]
+
+    upper_ci_ece: np.floating[Any]
+    median_ece: np.floating[Any]
+    lower_ci_ece: np.floating[Any]
+
+
+def generate_results_dict(results: Dict[str, List[float]]) -> ResultsDict:
+    preds = [1 if x >= 0.5 else 0 for x in results["logits"]]
+
+    results_dict: ResultsDict = {
+        "labels": [int(label) for label in results["labels"]],
+        "preds": preds,
+        "logits": results["logits"],
+        "bac": balanced_accuracy_score(results["labels"], preds),
+        "f1": f1_score(results["labels"], preds),  # type: ignore
+        "ece": calculate_ece(results["labels"], preds),
+    }
+
+    return results_dict
+
+
+def save_results(
+    results: List[Dict[str, List[float]]] | Dict[str, List[float]], model_name: str, mc_samples: Optional[int] = None
+) -> None:
+    if mc_samples is not None and isinstance(results, list):
+        assert len(results) == mc_samples, "Results length does not match MC samples length"
+        model_results_path = f"results/{model_name}_model_{mc_samples}MC_samples"
+        os.makedirs(model_results_path, exist_ok=True)
+
+        mc_sample_results: list[ResultsDict] = []
+        mc_sample_results_dict: dict[str, dict[str, float]] = {}
+        for mc_sample in range(len(results)):
+            sample_results: ResultsDict = generate_results_dict(results[mc_sample])
+
+            mc_sample_results.append(sample_results)
+
+            filtered_results = {"bac": sample_results["bac"], "f1": sample_results["f1"], "ece": sample_results["ece"]}
+            mc_sample_results_dict[f"mc_sample_{mc_sample}"] = filtered_results
+
+        assert len(mc_sample_results) == len(results), "Computed results length does not match input results length"
+
+        num_datapoints = len(mc_sample_results[0]["logits"])
+        median_logits = []
+        for i in range(num_datapoints):
+            logits_across_samples = [sample["logits"][i] for sample in mc_sample_results]
+
+            median_logits.append(np.median(logits_across_samples))
+
+        # Construct the final results dictionary
+        mc_results: MCResultsDict = {
+            "labels": mc_sample_results[0]["labels"],  # Labels are the same across all MC samples
+            "median_logits": median_logits,
+            "upper_ci_bac": np.percentile([sample["bac"] for sample in mc_sample_results], 97.5),
+            "median_bac": np.median([sample["bac"] for sample in mc_sample_results]),
+            "lower_ci_bac": np.percentile([sample["bac"] for sample in mc_sample_results], 2.5),
+            "upper_ci_f1": np.percentile([sample["f1"] for sample in mc_sample_results], 97.5),
+            "median_f1": np.median([sample["f1"] for sample in mc_sample_results]),
+            "lower_ci_f1": np.percentile([sample["f1"] for sample in mc_sample_results], 2.5),
+            "upper_ci_ece": np.percentile([sample["ece"] for sample in mc_sample_results], 97.5),
+            "median_ece": np.median([sample["ece"] for sample in mc_sample_results]),
+            "lower_ci_ece": np.percentile([sample["ece"] for sample in mc_sample_results], 2.5),
+        }
+
+        assert abs(mc_results["median_bac"] - mc_sample_results[0]["bac"]) < 1, "BACs are not close"
+
+        save_mc_sample_subset = {
+            k: v for k, v in mc_sample_results_dict.items() if k not in ["labels", "logits", "preds"]
+        }
+        save_mc_results_subset = {k: v for k, v in mc_results.items() if k not in ["labels", "median_logits"]}
+
+        fig, ax = plt.subplots()
+        CalibrationDisplay.from_predictions(
+            mc_results["labels"], mc_results["median_logits"], ax=ax, strategy="uniform", name=model_name
+        )
+
+        plt.savefig(f"{model_results_path}/Calibration_Curve.png")
+
+        with open(f"{model_results_path}/MC_Results.json", "w") as json_file:
+            json.dump(save_mc_results_subset, json_file, indent=4)
+        with open(f"{model_results_path}/MC_Results_All_Samples.json", "w") as json_file:
+            json.dump(save_mc_sample_subset, json_file, indent=4)
+
+        print(
+            f"Median BAC: {mc_results['median_bac']:.3f}, Median F1: {mc_results['median_f1']:.3f}, Median ECE: {mc_results['median_ece']:.3f}.\nFurther results saved to {model_results_path}"
+        )
+
+    elif mc_samples is None and isinstance(results, dict):
+        model_results_path = f"results/{model_name}_model"
+        os.makedirs(model_results_path, exist_ok=True)
+
+        results_dict: ResultsDict = generate_results_dict(results)
+
+        save_mc_resultsdict = {
+            "BAC": results_dict["bac"],
+            "F1": results_dict["f1"],
+            "ECE": results_dict["ece"],
+        }
+
+        fig, ax = plt.subplots()
+        CalibrationDisplay.from_predictions(
+            results_dict["labels"], results_dict["logits"], ax=ax, strategy="uniform", name=model_name
+        )
+
+        plt.savefig(f"{model_results_path}/Calibration_Curve.png")
+        with open(f"{model_results_path}/Results.json", "w") as json_file:
+            json.dump(save_mc_resultsdict, json_file, indent=4)
+
+        print(
+            f"BAC: {results_dict['bac']:.3f}, F1: {results_dict['f1']:.3f}, ECE: {results_dict['ece']:.3f}.\nFurther results saved to {model_results_path}"
+        )
+
+
+def calculate_ece(y_true, y_prob, n_bins=10) -> float:
+    y_true = np.array(y_true)
+    y_prob = np.array(y_prob)
+
+    assert len(y_true) == len(y_prob), "y_true and y_prob must have the same length"
+    assert np.all((y_prob >= 0) & (y_prob <= 1)), "y_prob values must be between 0 and 1"
+
     bin_edges = np.linspace(0, 1, n_bins + 1)
     bin_indices = np.digitize(y_prob, bin_edges, right=True)
 
@@ -158,14 +278,6 @@ def friedman_from_bac_csv(
     else:
         print("Same distributions (fail to reject H0) - No need for post hoc")
         return stat, p
-
-
-def get_cis(mcd_df: pd.DataFrame, confidence_level: float = 0.95):
-    mcd_df["median_preds"] = mcd_df["preds"].apply(lambda x: np.median(x))
-    mcd_df["lower_ci"] = mcd_df["preds"].apply(lambda x: np.percentile(x, (1 - confidence_level) / 2 * 100))
-    mcd_df["upper_ci"] = mcd_df["preds"].apply(lambda x: np.percentile(x, (1 + confidence_level) / 2 * 100))
-
-    return mcd_df
 
 
 def update_or_create_csv(file_path: str, new_df: pd.DataFrame, model_name: str) -> None:

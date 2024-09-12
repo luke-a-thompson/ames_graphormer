@@ -92,7 +92,7 @@ class TuningHyperparameterConfig:
         random_state: int = int(random() * 1e9),
         torch_device: str = "cuda",
         checkpoint_dir: str = "optuna_models",
-        n_trials: int = 1000,
+        n_trials: Optional[int] = None,
         # Data Parameters
         datadir: Optional[str] = None,
         dataset: Optional[DatasetType] = None,
@@ -435,7 +435,14 @@ class TuningHyperparameterConfig:
         if self.scheduler_type is None:
             self.scheduler_type = SchedulerType(
                 trial.suggest_categorical(
-                    "scheduler_type", [SchedulerType.GREEDY, SchedulerType.POLYNOMIAL, SchedulerType.PLATEAU]
+                    "scheduler_type",
+                    [
+                        SchedulerType.GREEDY,
+                        SchedulerType.POLYNOMIAL,
+                        SchedulerType.PLATEAU,
+                        SchedulerType.ONE_CYCLE,
+                        SchedulerType.FIXED,
+                    ],
                 )
             )
         if self.loss_reduction_type is None:

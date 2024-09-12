@@ -34,6 +34,7 @@ class ModelConfig:
         self.max_out_degree = None
         self.max_path_distance = None
         self.dropout = None
+        self.temperature = None
         self.state_dict = None
         self.norm_type = None
         self.attention_type = None
@@ -95,6 +96,10 @@ class ModelConfig:
         self.dropout = dropout
         return self
 
+    def with_temperature(self, temperature: float) -> Self:
+        self.temperature = temperature
+        return self
+
     def with_norm_type(self, norm_type: NormType) -> Self:
         self.norm_type = norm_type
         return self
@@ -150,6 +155,8 @@ class ModelConfig:
             raise AttributeError("max_path_distance is not defined for Graphormer")
         if self.dropout is None:
             raise AttributeError("dropout is not defined for Graphormer")
+        if self.temperature is None:
+            raise AttributeError("temperature is not defined for Graphormer")
         if self.norm_type is None:
             raise AttributeError("norm_type is not defined for Graphormer")
         if self.attention_type is None:
@@ -198,7 +205,7 @@ class ModelConfig:
                         )
 
                     num_heads = self.heads_by_layer[i]
-                    attention = GraphormerMultiHeadAttention(num_heads, self.hidden_dim, self.dropout)
+                    attention = GraphormerMultiHeadAttention(num_heads, self.hidden_dim, self.dropout, self.temperature)
                 case AttentionType.LINEAR:
                     if self.heads_by_layer is None or len(self.heads_by_layer) == 0:
                         assert self.n_heads is not None
