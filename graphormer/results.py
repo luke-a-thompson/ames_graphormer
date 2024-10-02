@@ -55,6 +55,8 @@ def generate_results_dict(results: Dict[str, List[float]]) -> ResultsDict:
 def save_results(
     results: List[Dict[str, List[float]]] | Dict[str, List[float]], model_name: str, mc_samples: Optional[int] = None
 ) -> None:
+    if model_name == "Test_small_testset3":
+        model_name = "AmesFormer-Honma"
     if mc_samples is not None and isinstance(results, list):
         assert len(results) == mc_samples, "Results length does not match MC samples length"
         model_results_path = f"results/{model_name}_model_{mc_samples}MC_samples"
@@ -73,11 +75,7 @@ def save_results(
         assert len(mc_sample_results) == len(results), "Computed results length does not match input results length"
 
         num_datapoints = len(mc_sample_results[0]["logits"])
-        median_logits = []
-        for i in range(num_datapoints):
-            logits_across_samples = [sample["logits"][i] for sample in mc_sample_results]
-
-            median_logits.append(np.median(logits_across_samples))
+        median_logits = np.median([sample["logits"] for sample in mc_sample_results], axis=0).tolist()
 
         # Construct the final results dictionary
         mc_results: MCResultsDict = {

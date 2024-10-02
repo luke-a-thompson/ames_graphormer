@@ -37,7 +37,7 @@ class TemperatureOptimizer:
             with torch.no_grad():
                 output = model(batch)
 
-            batch_eval_preds = torch.sigmoid(output).cpu().numpy()
+            batch_eval_preds = torch.sigmoid(output/temperature).cpu().numpy()
             batch_eval_labels = y.cpu().numpy()
             labels.extend(batch_eval_labels)
             preds.extend(batch_eval_preds)
