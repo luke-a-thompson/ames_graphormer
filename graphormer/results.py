@@ -46,7 +46,7 @@ def generate_results_dict(results: Dict[str, List[float]]) -> ResultsDict:
         "logits": results["logits"],
         "bac": balanced_accuracy_score(results["labels"], preds),
         "f1": f1_score(results["labels"], preds),  # type: ignore
-        "ece": calculate_ece(results["logits"], preds),
+        "ece": calculate_ece(results["labels"], results["logits"]),
     }
 
     return results_dict
