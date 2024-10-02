@@ -170,7 +170,7 @@ cython_debug/
 **/**/*.pt
 **/**/*.xlsx
 **/**/*.csv
-hparams/*
+/hparams/*
 *.sqlite3
 **/**/*.pkl
 **/**/*.png

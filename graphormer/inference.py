@@ -48,9 +48,9 @@ def inference_model(
     if mc_samples is not None and mc_dropout_rate is not None:
         mc_results = []
         model.enable_dropout(mc_dropout_rate)
+        labels = []
+        logits = []
         for mc_sample in tqdm(range(mc_samples), desc="MC Dropout Inference", unit="mc_sample"):
-            labels = []
-            logits = []
 
             for batch in inference_loader:  # type: ignore
                 batch.to(device)
@@ -69,9 +69,9 @@ def inference_model(
 
         return mc_results
     else:
+        labels = []
+        logits = []
         for batch in inference_loader:  # type: ignore
-            labels = []
-            logits = []
 
             batch.to(device)
             y = batch.y.to(device)

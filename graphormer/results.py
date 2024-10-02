@@ -106,7 +106,7 @@ def save_results(
             mc_results["labels"], mc_results["median_logits"], ax=ax, strategy="uniform", name=model_name
         )
 
-        plt.savefig(f"{model_results_path}/Calibration_Curve.png")
+        plt.savefig(f"{model_results_path}/Calibration_Curve.svg")
 
         with open(f"{model_results_path}/MC_Results.json", "w") as json_file:
             json.dump(save_mc_results_subset, json_file, indent=4)
@@ -207,8 +207,8 @@ def plot_calibration_curve(df: pd.DataFrame, model_name: str, save_path: str, mc
         ), f"upper_ci_y: {upper_ci_y} and lower_ci_y: {lower_ci_y} shapes do not match."
         ax.fill_between(ci_x, upper_ci_y, lower_ci_y, color="gray", alpha=0.2)
 
-    plt.savefig(f"{save_path}/{chart_type}.png")
-    print(f"Calibration curve saved to results/{save_path}/{chart_type}.png")
+    plt.savefig(f"{save_path}/{chart_type}.svg", format="svg")
+    print(f"Calibration curve saved to results/{save_path}/{chart_type}.svg")
 
 
 def save_mc_bacs(df: pd.DataFrame, model_name: str, global_results_path: str) -> None:

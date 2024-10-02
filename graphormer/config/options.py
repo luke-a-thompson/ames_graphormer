@@ -23,7 +23,7 @@ class DatasetType(str, Enum):
 
 
 class DatasetRegime(str, Enum):
-    TRAIN = "train"
+    TRAIN = "Train"
     TEST = "test"
 
 
