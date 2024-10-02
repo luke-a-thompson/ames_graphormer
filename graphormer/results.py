@@ -46,7 +46,7 @@ def generate_results_dict(results: Dict[str, List[float]]) -> ResultsDict:
         "logits": results["logits"],
         "bac": balanced_accuracy_score(results["labels"], preds),
         "f1": f1_score(results["labels"], preds),  # type: ignore
-        "ece": calculate_ece(results["labels"], preds),
+        "ece": calculate_ece(results["logits"], preds),
     }
 
     return results_dict
@@ -106,7 +106,7 @@ def save_results(
             mc_results["labels"], mc_results["median_logits"], ax=ax, strategy="uniform", name=model_name
         )
 
-        plt.savefig(f"{model_results_path}/Calibration_Curve.svg")
+        plt.savefig(f"{model_results_path}/Calibration_Curve.svg", format="svg")
 
         with open(f"{model_results_path}/MC_Results.json", "w") as json_file:
             json.dump(save_mc_results_subset, json_file, indent=4)
@@ -134,7 +134,7 @@ def save_results(
             results_dict["labels"], results_dict["logits"], ax=ax, strategy="uniform", name=model_name
         )
 
-        plt.savefig(f"{model_results_path}/Calibration_Curve.png")
+        plt.savefig(f"{model_results_path}/Calibration_Curve.svg", format="svg")
         with open(f"{model_results_path}/Results.json", "w") as json_file:
             json.dump(save_mc_resultsdict, json_file, indent=4)
 

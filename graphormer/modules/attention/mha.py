@@ -5,7 +5,7 @@ from graphormer.modules.model_data import ModelData
 
 
 class GraphormerMultiHeadAttention(nn.Module):
-    def __init__(self, num_heads: int, hidden_dim: int, dropout_rate: float = 0.1, temperature: float = 1.0):
+    def __init__(self, num_heads: int, hidden_dim: int, dropout_rate: float = 0.1):
         """
         :param num_heads: number of attention heads
         :param d_x: node feature matrix input number of dimension
@@ -25,7 +25,6 @@ class GraphormerMultiHeadAttention(nn.Module):
         self.linear_k = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
         self.linear_v = nn.Linear(self.hidden_dim, self.hidden_dim, bias=True)
         self.att_dropout = nn.Dropout(dropout_rate)
-        self.temperature = temperature
 
         self.linear_out = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
 
@@ -58,7 +57,7 @@ class GraphormerMultiHeadAttention(nn.Module):
 
         a = a + prior
         a[pad_mask] = float("-inf")
-        a = torch.softmax(a/self.temperature, dim=-1)
+        a = torch.softmax(a, dim=-1)
         a = torch.nan_to_num(a)
         # b: batch_size
         # n, m: max_subgraph_size

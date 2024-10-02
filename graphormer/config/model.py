@@ -205,7 +205,7 @@ class ModelConfig:
                         )
 
                     num_heads = self.heads_by_layer[i]
-                    attention = GraphormerMultiHeadAttention(num_heads, self.hidden_dim, self.dropout, self.temperature)
+                    attention = GraphormerMultiHeadAttention(num_heads, self.hidden_dim, self.dropout)
                 case AttentionType.LINEAR:
                     if self.heads_by_layer is None or len(self.heads_by_layer) == 0:
                         assert self.n_heads is not None

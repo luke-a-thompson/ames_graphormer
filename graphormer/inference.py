@@ -59,7 +59,8 @@ def inference_model(
                 with torch.no_grad():
                     output = model(batch)
 
-                batch_eval_logits: List[float] = torch.sigmoid(output).tolist()
+
+                batch_eval_logits: List[float] = torch.sigmoid(output/hparam_config.temperature).tolist()
                 batch_eval_labels: List[float] = y.cpu().tolist()
 
                 labels.extend(batch_eval_labels)
@@ -79,7 +80,7 @@ def inference_model(
             with torch.no_grad():
                 output = model(batch)
 
-            batch_eval_logits: List[float] = torch.sigmoid(output).tolist()
+            batch_eval_logits: List[float] = torch.sigmoid(output/hparam_config.temperature).tolist()
             batch_eval_labels: List[float] = y.cpu().tolist()
 
             labels.extend(batch_eval_labels)
